@@ -1,8 +1,17 @@
 #include <SDL/SDL.h>
 #include <SDL_ttf.h>
+#include <unistd.h>
+#include <signal.h>
+#include <linux/kd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+
 #include "sdl-keyboard.h"
 #include "sdl-picker.h"
 #include "sdl-textbox.h"
+#include "wpa-controller.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -140,12 +149,55 @@ pick_ssid(char *item, void *_data)
     return 0;
 }
 
+static int
+start_connecting(struct recovery_data *data)
+{
+    struct wpa_process *process;
+
+    process = start_wpa(data->ssid, data->encryption_type==ENC_WPA ? data->key : NULL);
+    if (!process) {
+        set_text_textbox(data->title_textbox, "Invalid key");
+        data->active = SELECT_KEY;
+    }
+    while (!poll_wpa(process, 1)) {
+        sleep(1);
+    }
+    stop_wpa(process);
+
+    return 0;
+}
+
+static void sig_cleanup(int sig) {
+    fprintf(stderr, "Got sig %d\n", sig);
+    SDL_Quit();
+    exit(1);
+}
+
+static void
+fix_tty(char *tty_name)
+{
+    int tty;
+    tty = open(tty_name, O_RDWR);
+    if (tty >= 0) {
+        ioctl(tty, KDSETMODE, KD_TEXT);
+        close(tty);
+    }
+}
 
 int main(int argc, char **argv) {
     struct recovery_data data;
     SDL_Surface *screen;
     SDL_Event e;
 
+
+    unlink("/dev/tty");
+    mknod("/dev/tty", S_IFCHR | 0777, makedev(4, 2));
+    fix_tty("/dev/tty");
+    fix_tty("/dev/tty0");
+    fix_tty("/dev/tty1");
+    fix_tty("/dev/tty2");
+    fix_tty("/dev/tty3");
+    fix_tty("/dev/tty4");
 
     bzero(&e, sizeof(e));
     bzero(&data, sizeof(data));
@@ -217,6 +269,8 @@ int main(int argc, char **argv) {
     redraw_picker(data.ssids, screen);
     SDL_Flip(screen);
 
+    signal(SIGTERM, sig_cleanup);
+
     while (!data.should_quit) {
 
         SDL_WaitEvent(&e);
@@ -258,6 +312,9 @@ int main(int argc, char **argv) {
 
                         if (data.title_textbox)
                             redraw_textbox(data.title_textbox, screen);
+
+                        if (START_CONNECTING == data.active)
+                            start_connecting(&data);
 
                         SDL_Flip(screen);
                         break;
