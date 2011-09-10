@@ -182,6 +182,7 @@ establish_connection(struct recovery_data *data)
 
     process = start_wpa(data->ssid, data->encryption_type==ENC_WPA ? data->key : NULL);
     if (!process) {
+        fprintf(stderr, "Couldn't start WPA\n");
         move_to_scene(data, SELECT_ENCRYPTION);
         return -1;
     }
@@ -189,25 +190,29 @@ establish_connection(struct recovery_data *data)
     do {
         ret = poll_wpa(process, 1);
     } while (!ret);
-    fprintf(stderr, "Connected!\n");
 
 
     if (ret < 0) {
+        fprintf(stderr, "Connection error: %d\n", ret);
         move_to_scene(data, CONNECTION_ERROR);
         stop_wpa(process);
     }
-    else
+    else {
+        fprintf(stderr, "Connected!\n");
         move_to_scene(data, CONNECTED);
+    }
 
     redraw_scene(data);
 
     return 0;
 }
 
-static void sig_cleanup(int sig) {
+static void sig_handle(int sig) {
     fprintf(stderr, "Got sig %d\n", sig);
-    SDL_Quit();
-    exit(1);
+    if (sig == SIGTERM) {
+        SDL_Quit();
+        exit(1);
+    }
 }
 
 #ifdef linux
@@ -276,11 +281,11 @@ setup_scenes(struct recovery_data *data)
     picker->h = 500;
     picker->data = data;
     picker->pick_item = pick_ssid;
-#ifdef __APPLE__
+//#ifdef __APPLE__
     add_item_to_picker(picker, "Test SSID");
     add_item_to_picker(picker, "Test 2 SSID");
     add_item_to_picker(picker, "Test 3 SSID");
-#endif
+//#endif
     /*
     add_item_to_picker(picker, "Lorem");
     add_item_to_picker(picker, "ipsum");
@@ -439,16 +444,21 @@ int main(int argc, char **argv) {
     bzero(&data, sizeof(data));
 
 
-    signal(SIGTERM, sig_cleanup);
+    signal(SIGTERM, sig_handle);
+    signal(SIGHUP, sig_handle);
+    signal(SIGALRM, sig_handle);
 #ifdef linux
+    alarm(1);
+/*
     unlink("/dev/tty");
-    mknod("/dev/tty", S_IFCHR | 0777, makedev(4, 2));
+    mknod("/dev/tty", S_IFCHR | 0777, makedev(4, 0));
     fix_tty("/dev/tty");
     fix_tty("/dev/tty0");
     fix_tty("/dev/tty1");
     fix_tty("/dev/tty2");
     fix_tty("/dev/tty3");
     fix_tty("/dev/tty4");
+*/
 #endif
 
     bzero(&e, sizeof(e));
@@ -471,6 +481,7 @@ int main(int argc, char **argv) {
 
 
     data.screen = SDL_SetVideoMode(1280, 720, 16, 0);
+    alarm(0);
     if (!data.screen) {
         fprintf(stderr, "Error: %s\n", SDL_GetError());
         return 0;
