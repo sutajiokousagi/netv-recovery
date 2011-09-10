@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/select.h>
 #include <strings.h>
+#include <string.h>
 #include <unistd.h>
 
 #define CONFIG_FILE "/wpa.conf"
@@ -35,7 +36,7 @@ static int create_config(struct wpa_process *process) {
     return 0;
 }
 
-int poll_wpa(struct wpa_process *process) {
+int poll_wpa(struct wpa_process *process, int blocking) {
     struct timeval timeout;
     int ret;
     int fd;
@@ -47,13 +48,17 @@ int poll_wpa(struct wpa_process *process) {
     FD_ZERO(&set);
     FD_SET(fd, &set);
 
-    ret = select(fd+1, &set, NULL, NULL, &timeout);
+    if (blocking)
+        ret = 1;
+    else
+        ret = select(fd+1, &set, NULL, NULL, &timeout);
 
     if (ret > 0) {
         char line[4096];
+        int bytes;
         bzero(line, sizeof(line));
-        read(fd, line, sizeof(line));
-        fprintf(stderr, "Read line: [%s]\n", line);
+        bytes = read(fd, line, sizeof(line));
+        fprintf(stderr, "Read %d bytes from %d.  Line: [%s]\n", bytes, fd, line);
         return 0;
     }
     else if (ret == 0) {
