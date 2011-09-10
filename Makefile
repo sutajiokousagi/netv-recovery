@@ -5,15 +5,15 @@ SOURCES=netv-recovery.c \
     wpa-controller.c
 OBJECTS=$(SOURCES:.c=.o)
 EXEC=netv-recovery
-CFLAGS += `pkg-config sdl --cflags` -Wall -g
-LIBS += `pkg-config sdl --libs` -lSDL_ttf
+MY_CFLAGS += `pkg-config sdl --cflags` -Wall -g
+MY_LIBS += `pkg-config sdl --libs` -lSDL_ttf
 
 all: $(OBJECTS)
-	$(CC) $(LIBS) $(OBJECTS) -o $(EXEC)
+	$(CC) $(MY_LIBS) $(LIBS) $(OBJECTS) -o $(EXEC)
 
 clean:
 	rm -f $(EXEC) $(OBJECTS)
 
 .c.o:
-	$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(MY_CFLAGS) $< -o $@
 
