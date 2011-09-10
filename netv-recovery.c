@@ -153,6 +153,7 @@ int main(int argc, char **argv) {
     data.active = SELECT_SSID;
     data.should_quit = 0;
 
+    setenv("SDL_NOMOUSE", "1", 1);
     if (SDL_Init(SDL_INIT_EVERYTHING)) {
         fprintf(stderr, "Couldn't initialize SDL: %s\n", SDL_GetError());
         return 1;
