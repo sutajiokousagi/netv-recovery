@@ -9,7 +9,7 @@ MY_CFLAGS += `pkg-config sdl --cflags` -Wall -g
 MY_LIBS += `pkg-config sdl --libs` -lSDL_ttf
 
 all: $(OBJECTS)
-	$(CC) $(MY_LIBS) $(LIBS) $(OBJECTS) -o $(EXEC)
+	$(CC) $(MY_LIBS) $(LIBS) $(LDFLAGS) $(OBJECTS) -o $(EXEC)
 
 clean:
 	rm -f $(EXEC) $(OBJECTS)
