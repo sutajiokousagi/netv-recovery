@@ -1,7 +1,8 @@
 SOURCES=netv-recovery.c \
     keyboard.c sdl-keyboard.c \
     sdl-picker.c picker.c  \
-    textbox.c sdl-textbox.c
+    textbox.c sdl-textbox.c \
+    wpa-controller.c
 OBJECTS=$(SOURCES:.c=.o)
 EXEC=netv-recovery
 CFLAGS += `pkg-config sdl --cflags` -Wall -g
