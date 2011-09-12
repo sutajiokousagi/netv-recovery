@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <strings.h>
@@ -14,6 +15,10 @@ struct wpa_process {
     char *ssid;
     char *key;
 };
+
+static int startswith(char *s1, char *s2) {
+    return !strncmp(s1, s2, strlen(s2));
+}
 
 static int create_config(struct wpa_process *process) {
     FILE *cfg;
@@ -40,11 +45,11 @@ int poll_wpa(struct wpa_process *process, int blocking) {
     struct timeval timeout;
     int ret;
     int fd;
+    fd_set set;
 
     bzero(&timeout, sizeof(timeout));
     fd = fileno(process->prog);
 
-    fd_set set;
     FD_ZERO(&set);
     FD_SET(fd, &set);
 
@@ -58,7 +63,23 @@ int poll_wpa(struct wpa_process *process, int blocking) {
         int bytes;
         bzero(line, sizeof(line));
         bytes = read(fd, line, sizeof(line));
-        fprintf(stderr, "Read %d bytes from %d.  Line: [%s]\n", bytes, fd, line);
+
+        /* This happens if wpa_supplicant quits */
+        if (!bytes)
+            return -1;
+
+        fprintf(stderr, "Read %d bytes from %d.  Line: %s", bytes, fd, line);
+
+        /* Indicates an error was encountered */
+        if (bytes < 0) {
+            if ((errno == EAGAIN) || (errno == EINTR))
+                return 0;
+            return -1;
+        }
+
+        if (startswith(line, "CTRL-EVENT-CONNECTED "))
+            return 1;
+
         return 0;
     }
     else if (ret == 0) {
