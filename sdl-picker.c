@@ -40,9 +40,9 @@ redraw_picker(struct picker *picker, SDL_Surface *screen) {
     normal_color.g = 255;
     normal_color.b = 0;
 
-    highlight_color.r = 53;
+    highlight_color.r = 33;
     highlight_color.g = 0;
-    highlight_color.g = 193;
+    highlight_color.g = 123;
 
 
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
