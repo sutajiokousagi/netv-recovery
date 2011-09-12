@@ -11,17 +11,26 @@
 #define SELECT_SSID 1
 #define TYPE_SSID 2
 #define SELECT_KEY 3
-#define CONNECTING 4
+#define TYPE_KEY 4
+#define START_CONNECTING 5
+#define CONNECTING 6
+
+#define ENC_OPEN 0
+#define ENC_WPA 1
+
+#define OTHER_NETWORK_STRING "[Other Network]"
 
 struct recovery_data {
     struct keyboard *kbd;
     struct picker *ssids; /* Selectable SSIDs */
-    struct textbox *ssid_textbox;
+    struct picker *select_encryption; /* Selectable encryption */
+    struct textbox *title_textbox;
 
     char *ssid;
     char *key;
 
     int active;
+    int encryption_type;
     int should_quit;
 };
 
@@ -34,13 +43,23 @@ set_ssid(struct recovery_data *data, char *str)
     strcpy(data->ssid, str);
 }
 
+static void
+set_key(struct recovery_data *data, char *str)
+{
+    if (data->key)
+        free(data->key);
+    data->key = malloc(strlen(str)+1);
+    strcpy(data->key, str);
+}
+
 static int
 pressed_key(int key, void *_data)
 {
     struct recovery_data *data = _data;
 
-    if (data->active == TYPE_SSID) {
-        char *str = get_text_textbox(data->ssid_textbox);
+    if (data->active == TYPE_SSID
+     || data->active == TYPE_KEY) {
+        char *str = get_text_textbox(data->title_textbox);
         int new_str_len = 1;
         if (str)
             new_str_len = strlen(str)+1;
@@ -48,11 +67,17 @@ pressed_key(int key, void *_data)
         if (key == '\b') {
             if (new_str_len > 1)
                 str[new_str_len-2] = '\0';
-            set_text_textbox(data->ssid_textbox, str);
+            set_text_textbox(data->title_textbox, str);
         }
         else if(key == '\n') {
-            set_ssid(data, str);
-            data->active = SELECT_KEY;
+            if (data->active == TYPE_SSID) {
+                set_ssid(data, str);
+                data->active = SELECT_KEY;
+            }
+            else if(data->active == TYPE_KEY) {
+                set_key(data, str);
+                data->active = START_CONNECTING;
+            }
         }
         else if(key == '\t') {
             ;
@@ -62,31 +87,53 @@ pressed_key(int key, void *_data)
             bzero(newstr, sizeof(newstr));
             strcpy(newstr, str);
             newstr[new_str_len-1] = key;
-            set_text_textbox(data->ssid_textbox, newstr);
+            set_text_textbox(data->title_textbox, newstr);
         }
     }
 
     return 0;
 }
 
+
 static int
-pick_item(char *item, void *_data)
+pick_encryption(char *item, void *_data)
 {
     struct recovery_data *data = _data;
 
-    data->ssid_textbox = create_textbox();
-    data->ssid_textbox->x = 70;
-    data->ssid_textbox->y = 70;
-    data->ssid_textbox->w = 1000;
-    data->ssid_textbox->h = 128;
-    set_label_textbox(data->ssid_textbox, "SSID: ");
+    if (data->select_encryption->active_entry == 0) {
+        fprintf(stderr, "Using open encryption\n");
+        data->encryption_type = ENC_OPEN;
+        data->active = START_CONNECTING;
+    }
+    else {
+        fprintf(stderr, "Using WPA\n");
+        data->encryption_type = ENC_WPA;
+        data->active = TYPE_KEY;
+        set_label_textbox(data->title_textbox, "Key: ");
+        set_text_textbox(data->title_textbox, "");
+    }
+    return 0;
+}
+
+
+static int
+pick_ssid(char *item, void *_data)
+{
+    struct recovery_data *data = _data;
+
+    data->title_textbox = create_textbox();
+    data->title_textbox->x = 140;
+    data->title_textbox->y = 80;
+    data->title_textbox->w = 1000;
+    data->title_textbox->h = 128;
+    set_label_textbox(data->title_textbox, "Network: ");
 
     if (data->ssids->active_entry == data->ssids->entry_count-1) {
-        set_text_textbox(data->ssid_textbox, "");
+        set_text_textbox(data->title_textbox, " ");
         data->active = TYPE_SSID;
     }
     else {
-        set_text_textbox(data->ssid_textbox, item);
+        set_text_textbox(data->title_textbox, item);
         set_ssid(data, item);
         data->active = SELECT_KEY;
     }
@@ -124,14 +171,14 @@ int main(int argc, char **argv) {
 
     data.ssids = create_picker();
     data.ssids->data = &data;
-    data.ssids->pick_item = pick_item;
+    data.ssids->pick_item = pick_ssid;
 
+    data.select_encryption = create_picker();
+    data.select_encryption->data = &data;
+    data.select_encryption->pick_item = pick_encryption;
 
-    screen = SDL_SetVideoMode(1280, 720, 16, 0);
-    if (!screen) {
-        fprintf(stderr, "Error: %s\n", SDL_GetError());
-        return 0;
-    }
+    add_item_to_picker(data.select_encryption, "Open");
+    add_item_to_picker(data.select_encryption, "WPA");
 
 
     /* Start out by drawing the keyboard afresh */
@@ -142,19 +189,30 @@ int main(int argc, char **argv) {
     data.ssids->w = 1000;
     data.ssids->h = 500;
 
-    /*
+
+    data.select_encryption->x = 140;
+    data.select_encryption->y = 120;
+    data.select_encryption->w = 1000;
+    data.select_encryption->h = 500;
+
     add_item_to_picker(data.ssids, "Test SSID");
     add_item_to_picker(data.ssids, "Test 2 SSID");
     add_item_to_picker(data.ssids, "Test 3 SSID");
+    /*
     add_item_to_picker(data.ssids, "Lorem");
     add_item_to_picker(data.ssids, "ipsum");
     add_item_to_picker(data.ssids, "dolor");
     add_item_to_picker(data.ssids, "sit");
     add_item_to_picker(data.ssids, "dolum");
-    add_item_to_picker(data.ssids, "vic");
-    add_item_to_picker(data.ssids, "wall");
     */
-    add_item_to_picker(data.ssids, "[Custom SSID]");
+    add_item_to_picker(data.ssids, OTHER_NETWORK_STRING);
+
+
+    screen = SDL_SetVideoMode(1280, 720, 16, 0);
+    if (!screen) {
+        fprintf(stderr, "Error: %s\n", SDL_GetError());
+        return 0;
+    }
     redraw_picker(data.ssids, screen);
     SDL_Flip(screen);
 
@@ -178,19 +236,27 @@ int main(int argc, char **argv) {
 
                         SDL_FillRect(screen, NULL, 0);
                         /* Process the input */
-                        if (TYPE_SSID == data.active)
-                            press_keyboard(data.kbd, key->keysym.sym);
-                        else if(SELECT_SSID == data.active)
+                        if(SELECT_SSID == data.active)
                             press_picker(data.ssids, key->keysym.sym);
+                        else if (TYPE_SSID == data.active)
+                            press_keyboard(data.kbd, key->keysym.sym);
+                        else if(SELECT_KEY == data.active)
+                            press_picker(data.select_encryption, key->keysym.sym);
+                        else if (TYPE_KEY == data.active)
+                            press_keyboard(data.kbd, key->keysym.sym);
 
                         /* Redraw the [possibly-new] widget */
-                        if (TYPE_SSID == data.active)
-                            redraw_keyboard(data.kbd, screen);
-                        else if(SELECT_SSID == data.active)
+                        if(SELECT_SSID == data.active)
                             redraw_picker(data.ssids, screen);
+                        else if (TYPE_SSID == data.active)
+                            redraw_keyboard(data.kbd, screen);
+                        else if(SELECT_KEY == data.active)
+                            redraw_picker(data.select_encryption, screen);
+                        else if(TYPE_KEY == data.active)
+                            redraw_keyboard(data.kbd, screen);
 
-                        if (data.ssid_textbox)
-                            redraw_textbox(data.ssid_textbox, screen);
+                        if (data.title_textbox)
+                            redraw_textbox(data.title_textbox, screen);
 
                         SDL_Flip(screen);
                         break;
