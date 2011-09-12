@@ -41,22 +41,24 @@ redraw_textbox(struct textbox *textbox, SDL_Surface *screen)
 
 
 
-    TTF_SizeText(textbox->font, textbox->string, &w, &h);
-    c.r = 255;
-    c.g = 255;
-    c.b = 255;
-    tmp = TTF_RenderText_Solid(textbox->font, textbox->string, c);
+    if (textbox->string && strlen(textbox->string)) {
+        TTF_SizeText(textbox->font, textbox->string, &w, &h);
+        c.r = 255;
+        c.g = 255;
+        c.b = 255;
+        tmp = TTF_RenderText_Solid(textbox->font, textbox->string, c);
 
-    if (!tmp) {
-        fprintf(stderr, "Unable to render text: %s\n", TTF_GetError());
-        return 1;
+        if (!tmp) {
+            fprintf(stderr, "Unable to render text: %s\n", TTF_GetError());
+            return 1;
+        }
+        r.x += r.w + TEXTBOX_LABEL_PADDING; /* Reuse r.w from previous render */
+        r.y = textbox->y;
+        r.w = tmp->w;
+        r.h = tmp->h;
+        SDL_BlitSurface(tmp, NULL, screen, &r);
+        SDL_FreeSurface(tmp);
     }
-    r.x += r.w + TEXTBOX_LABEL_PADDING; /* Reuse r.w from previous render */
-    r.y = textbox->y;
-    r.w = tmp->w;
-    r.h = tmp->h;
-    SDL_BlitSurface(tmp, NULL, screen, &r);
-    SDL_FreeSurface(tmp);
 
     return 0;
 }
