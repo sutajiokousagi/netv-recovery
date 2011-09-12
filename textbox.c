@@ -8,6 +8,10 @@ create_textbox(void)
 {
     struct textbox *new = malloc(sizeof(struct textbox));
     bzero(new, sizeof(*new));
+    new->string = malloc(1);
+    new->string[0] = '\0';
+    new->label = malloc(1);
+    new->label[0] = '\0';
     return new;
 }
 
