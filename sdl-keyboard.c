@@ -52,7 +52,7 @@ redraw_keyboard(struct keyboard *kbd,
     highlight_color.b = 255;
 
     if (!kbd->font)
-        kbd->font = TTF_OpenFont("DejaVuSans.ttf", 24);
+        kbd->font = TTF_OpenFont("AMD.ttf", 24);
     if (!kbd->font)
         fprintf(stderr, "Couldn't load font: %s\n", TTF_GetError());
 

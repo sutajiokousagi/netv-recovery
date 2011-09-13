@@ -21,6 +21,7 @@ struct picker {
 
 struct picker * create_picker(void);
 int add_item_to_picker(struct picker *picker, char *item);
+int clear_picker(struct picker *picker);
 void destroy_picker(struct picker *picker);
 
 #endif /* __PICKER_H__ */

@@ -58,7 +58,7 @@ redraw_picker(struct picker *picker, SDL_Surface *screen) {
 #endif
 
     if (!picker->font)
-        picker->font = TTF_OpenFont("DejaVuSans.ttf", 24);
+        picker->font = TTF_OpenFont("AMD.ttf", 24);
     if (!picker->font)
         fprintf(stderr, "Couldn't load font: %s\n", TTF_GetError());
 

@@ -20,7 +20,7 @@ add_item_to_picker(struct picker *picker, char *item)
     if (!item)
         return 0;
 
-    /* Look for the item in the picker */
+    /* Look for the item in the picker, don't allow duplicates */
     for (i=0; i<picker->entry_count; i++)
         if (!strcmp(picker->entries[i], item))
             return 1;
@@ -29,6 +29,18 @@ add_item_to_picker(struct picker *picker, char *item)
     picker->entries=realloc(picker->entries, picker->entry_count*sizeof(char*));
     picker->entries[picker->entry_count-1] = malloc(strlen(item)+1);
     strcpy(picker->entries[picker->entry_count-1], item);
+    return 0;
+}
+
+int
+clear_picker(struct picker *picker)
+{
+    int i;
+    for (i=0; i<picker->entry_count; i++)
+        free(picker->entries[i]);
+    free(picker->entries);
+    picker->entries = NULL;
+    picker->entry_count = 0;
     return 0;
 }
 

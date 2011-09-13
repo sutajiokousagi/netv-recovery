@@ -2,22 +2,29 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/select.h>
+#include <sys/wait.h>
 #include <strings.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #define CONFIG_FILE "/wpa.conf"
-#define WPA_COMMAND "wpa_supplicant -iwlan0 -c" CONFIG_FILE
 
 
 struct wpa_process {
-    FILE *prog;
+    int pid;
+    int pipe;
     char *ssid;
     char *key;
 };
 
 static int startswith(char *s1, char *s2) {
     return !strncmp(s1, s2, strlen(s2));
+}
+
+static void handle_chld(int sig) {
+    fprintf(stderr, "SIGCHLD.  Waiting...\n");
+    fprintf(stderr, "Wait result: %d\n", waitpid(-1, NULL, WNOHANG));
 }
 
 static int create_config(struct wpa_process *process) {
@@ -48,7 +55,7 @@ int poll_wpa(struct wpa_process *process, int blocking) {
     fd_set set;
 
     bzero(&timeout, sizeof(timeout));
-    fd = fileno(process->prog);
+    fd = process->pipe;
 
     FD_ZERO(&set);
     FD_SET(fd, &set);
@@ -68,17 +75,25 @@ int poll_wpa(struct wpa_process *process, int blocking) {
         if (!bytes)
             return -1;
 
-        fprintf(stderr, "Read %d bytes from %d.  Line: %s", bytes, fd, line);
-
         /* Indicates an error was encountered */
         if (bytes < 0) {
             if ((errno == EAGAIN) || (errno == EINTR))
                 return 0;
+            perror("Unable to read");
             return -1;
         }
 
-        if (startswith(line, "CTRL-EVENT-CONNECTED "))
+        int i;
+        for(i=0; line[i] && i<bytes; i++)
+            if (line[i] == '\n' || line[i] == '\r')
+                line[i] = '\0';
+        fprintf(stderr, "Read %d bytes from %d.  Line: [%s]\n", bytes, fd, line);
+
+        if (startswith(line, "Associated with "))
             return 1;
+
+        if (startswith(line, "No network configuration "))
+            return -1;
 
         return 0;
     }
@@ -86,7 +101,7 @@ int poll_wpa(struct wpa_process *process, int blocking) {
         return 0;
     }
     else {
-        perror("Unable to read!");
+        perror("Unable to select");
         return -1;
     }
 }
@@ -107,9 +122,31 @@ struct wpa_process *start_wpa(char *ssid, char *key) {
 
     create_config(process);
 
-    process->prog = popen(WPA_COMMAND, "r");
-    if (!process->prog)
+    int p[2];
+    pipe(p);
+    signal(SIGCHLD, handle_chld);
+    process->pid = fork();
+    if (!process->pid) {
+        close(p[0]);
+        dup2(p[1], 1);
+        dup2(p[1], 2);
+        close(p[1]);
+
+        setvbuf(stdout, NULL, _IOLBF, 0);
+        setvbuf(stdin, NULL, _IOLBF, 0);
+
+        printf("Hi there!\n");
+        execlp("wpa_supplicant", "-Dwext", "-iwlan0", "-c" CONFIG_FILE, NULL);
+        perror("Unable to exec");
+        exit(1);
+    }
+    else if(process->pid < 0) {
+        perror("Unable to fork");
         goto err;
+    }
+
+    close(p[1]);
+    process->pipe = p[0];
 
     return process;
 
@@ -118,8 +155,10 @@ err:
         free(process->key);
     if (process && process->ssid)
         free(process->ssid);
-    if (process && process->prog)
-        pclose(process->prog);
+    if (process && process->pipe)
+        close(process->pipe);
+    if (process && process->pid)
+        kill(SIGTERM, process->pid);
     if(process)
         free(process);
     return NULL;
@@ -130,8 +169,10 @@ int stop_wpa(struct wpa_process *process) {
         free(process->key);
     if (process && process->ssid)
         free(process->ssid);
-    if (process && process->prog)
-        pclose(process->prog);
+    if (process && process->pipe)
+        close(process->pipe);
+    if (process && process->pid)
+        kill(SIGTERM, process->pid);
     free(process);
     return 0;
 }

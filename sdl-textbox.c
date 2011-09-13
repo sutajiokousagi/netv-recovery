@@ -10,12 +10,12 @@ redraw_textbox(struct textbox *textbox, SDL_Surface *screen)
     SDL_Color c;
 
     if (!textbox->font)
-        textbox->font = TTF_OpenFont("DejaVuSans.ttf", 24);
+        textbox->font = TTF_OpenFont("AMD.ttf", 24);
     if (!textbox->font)
         fprintf(stderr, "Couldn't load font: %s\n", TTF_GetError());
 
     if (!textbox->label_font)
-        textbox->label_font = TTF_OpenFont("DejaVuSans-Bold.ttf", 24);
+        textbox->label_font = TTF_OpenFont("AMD.ttf", 24);
     if (!textbox->label_font)
         fprintf(stderr, "Couldn't load font: %s\n", TTF_GetError());
 

@@ -17,6 +17,10 @@
 #include "sdl-textbox.h"
 #include "wpa-controller.h"
 
+#ifdef linux
+#include "ap-scan.h"
+#endif
+
 #define ICON_W 64
 #define ICON_H 64
 #define ICON_PADDING 8
@@ -180,6 +184,8 @@ establish_connection(struct recovery_data *data)
     struct wpa_process *process;
     int ret;
 
+    redraw_scene(data);
+
     process = start_wpa(data->ssid, data->encryption_type==ENC_WPA ? data->key : NULL);
     if (!process) {
         fprintf(stderr, "Couldn't start WPA\n");
@@ -188,7 +194,7 @@ establish_connection(struct recovery_data *data)
     }
 
     do {
-        ret = poll_wpa(process, 1);
+        ret = poll_wpa(process, 0);
     } while (!ret);
 
 
@@ -198,6 +204,11 @@ establish_connection(struct recovery_data *data)
         stop_wpa(process);
     }
     else {
+        fprintf(stderr, "Obtaining IP...\n");
+        if (system("busybox udhcpc -i wlan0")) {
+            fprintf(stderr, "Connection error: %d\n", ret);
+            move_to_scene(data, CONNECTION_ERROR);
+        }
         fprintf(stderr, "Connected!\n");
         move_to_scene(data, CONNECTED);
     }
@@ -206,6 +217,24 @@ establish_connection(struct recovery_data *data)
 
     return 0;
 }
+
+#ifdef linux
+static int
+run_ap_scan(struct recovery_data *data)
+{
+    struct ap_description *aps;
+    struct picker *picker = data->scene->elements[0].data;
+    int i;
+
+    system("busybox ifconfig wlan0 up");
+    aps = ap_scan();
+
+    clear_picker(picker);
+    for (i=0; aps && aps[i].populated; i++)
+        add_item_to_picker(picker, aps[i].ssid);
+    add_item_to_picker(picker, OTHER_NETWORK_STRING);
+}
+#endif
 
 static void sig_handle(int sig) {
     fprintf(stderr, "Got sig %d\n", sig);
@@ -258,7 +287,10 @@ move_to_scene(struct recovery_data *data, int scene)
          i<sizeof(data->scenes)/sizeof(data->scenes[0]);
          i++) {
         if (data->scenes[i].id == scene) {
-            data->scene = data->scenes+i;
+            data->scene = &data->scenes[i];
+
+            if (data->scene->function)
+                data->scene->function(data);
             return 1;
         }
     }
@@ -281,11 +313,11 @@ setup_scenes(struct recovery_data *data)
     picker->h = 500;
     picker->data = data;
     picker->pick_item = pick_ssid;
-//#ifdef __APPLE__
+#ifdef __APPLE__
     add_item_to_picker(picker, "Test SSID");
     add_item_to_picker(picker, "Test 2 SSID");
     add_item_to_picker(picker, "Test 3 SSID");
-//#endif
+#endif
     /*
     add_item_to_picker(picker, "Lorem");
     add_item_to_picker(picker, "ipsum");
@@ -311,6 +343,9 @@ setup_scenes(struct recovery_data *data)
     data->scenes[0].elements[1].data = textbox;
     data->scenes[0].elements[1].draw = redraw_textbox;
     data->scenes[0].num_elements = 2;
+#ifdef linux
+    data->scenes[0].function = run_ap_scan;
+#endif
 
 
 
@@ -449,6 +484,15 @@ int main(int argc, char **argv) {
     signal(SIGALRM, sig_handle);
 #ifdef linux
     alarm(1);
+    unlink("/dev/tty0");
+    unlink("/dev/tty1");
+    unlink("/dev/tty2");
+    unlink("/dev/tty3");
+    unlink("/dev/tty4");
+    unlink("/dev/tty5");
+    unlink("/dev/tty6");
+    unlink("/dev/tty7");
+    unlink("/dev/tty8");
 /*
     unlink("/dev/tty");
     mknod("/dev/tty", S_IFCHR | 0777, makedev(4, 0));
@@ -510,9 +554,6 @@ int main(int argc, char **argv) {
 
                         process_key(&data, key->keysym.sym);
                         redraw_scene(&data);
-
-                        if (data.scene->function)
-                            data.scene->function(&data);
 
                         break;
 
