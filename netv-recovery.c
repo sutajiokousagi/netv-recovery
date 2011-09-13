@@ -226,12 +226,27 @@ run_ap_scan(struct recovery_data *data)
     struct picker *picker = data->scene->elements[0].data;
     int i;
 
+    redraw_scene(data);
     system("busybox ifconfig wlan0 up");
     aps = ap_scan();
 
     clear_picker(picker);
     for (i=0; aps && aps[i].populated; i++)
         add_item_to_picker(picker, aps[i].ssid);
+    add_item_to_picker(picker, OTHER_NETWORK_STRING);
+}
+#endif
+#ifdef __APPLE__
+static int
+wait_a_bit(struct recovery_data *data)
+{
+    struct picker *picker = data->scene->elements[0].data;
+    redraw_scene(data);
+    sleep(1);
+    clear_picker(picker);
+    add_item_to_picker(picker, "Test SSID");
+    add_item_to_picker(picker, "Test 2 SSID");
+    add_item_to_picker(picker, "Test 3 SSID");
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
 }
 #endif
@@ -313,11 +328,6 @@ setup_scenes(struct recovery_data *data)
     picker->h = 500;
     picker->data = data;
     picker->pick_item = pick_ssid;
-#ifdef __APPLE__
-    add_item_to_picker(picker, "Test SSID");
-    add_item_to_picker(picker, "Test 2 SSID");
-    add_item_to_picker(picker, "Test 3 SSID");
-#endif
     /*
     add_item_to_picker(picker, "Lorem");
     add_item_to_picker(picker, "ipsum");
@@ -333,8 +343,7 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
-    set_label_textbox(textbox, "Select network");
-    set_text_textbox(textbox, " ");
+    set_text_textbox(textbox, "Scanning for networks...");
 
     data->scenes[0].id = SELECT_SSID;
     data->scenes[0].elements[0].data = picker;
@@ -345,6 +354,9 @@ setup_scenes(struct recovery_data *data)
     data->scenes[0].num_elements = 2;
 #ifdef linux
     data->scenes[0].function = run_ap_scan;
+#endif
+#ifdef __APPLE__
+    data->scenes[0].function = wait_a_bit;
 #endif
 
 
