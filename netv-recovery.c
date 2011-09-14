@@ -536,6 +536,8 @@ int main(int argc, char **argv) {
 #ifdef linux
     if (mkdir("/dev/input", 0777) == -1)
         perror("Unable to mkdir /dev/input");
+    unlink("/dev/input/event0");
+    unlink("/dev/input/event1");
     if (mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64)) == -1)
         perror("Unable to mknod /dev/input/event0");
     if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
