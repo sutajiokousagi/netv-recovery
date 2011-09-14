@@ -276,6 +276,11 @@ sig_handle(int sig)
         SDL_Quit();
         exit(1);
     }
+    if (sig == SIGSEGV || sig == SIGILL || sig == SIGTRAP || sig == SIGFPE) {
+        NOTE("That was a very bad signal.  Aborting.\n");
+        SDL_Quit();
+        exit(1);
+    }
 }
 
 
@@ -329,6 +334,7 @@ setup_scenes(struct recovery_data *data)
     struct textbox *textbox2;
 
     /* Select SSID */
+    NOTE("Creating scene 1\n");
     picker = create_picker();
     picker->x = 140;
     picker->y = 120;
@@ -357,6 +363,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
+    NOTE("Creating scene 2\n");
     kbd = create_keyboard(KEYS, SHIFTS);
     kbd->x = 120;
     kbd->y = 270;
@@ -382,6 +389,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
+    NOTE("Creating scene 3\n");
     picker = create_picker();
     picker->x = 140;
     picker->y = 120;
@@ -411,6 +419,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
+    NOTE("Creating scene 4\n");
     kbd = create_keyboard(KEYS, SHIFTS);
     kbd->x = 120;
     kbd->y = 270;
@@ -436,6 +445,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
+    NOTE("Creating scene 5\n");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -453,6 +463,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
+    NOTE("Creating scene 6\n");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -467,9 +478,9 @@ setup_scenes(struct recovery_data *data)
     data->scenes[5].elements[0].draw = MAKEDRAW(redraw_textbox);
     data->scenes[5].num_elements = 1;
 
-    textbox2->data = data;
 
 
+    NOTE("Creating scene 7\n");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -488,8 +499,6 @@ setup_scenes(struct recovery_data *data)
     textbox2->data = data;
     set_label_textbox(textbox2, "Press any key to try again");
 
-
-
     data->scenes[6].id = CONNECTION_ERROR;
     data->scenes[6].elements[0].data = textbox;
     data->scenes[6].elements[0].draw = MAKEDRAW(redraw_textbox);
@@ -498,6 +507,9 @@ setup_scenes(struct recovery_data *data)
     data->scenes[6].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[6].num_elements = 2;
 
+
+
+    NOTE("Creating scene 8\n");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -537,6 +549,11 @@ int main(int argc, char **argv) {
     signal(SIGTERM, sig_handle);
     signal(SIGHUP, sig_handle);
     signal(SIGALRM, sig_handle);
+
+    signal(SIGSEGV, sig_handle);
+    signal(SIGTRAP, sig_handle);
+    signal(SIGILL, sig_handle);
+    signal(SIGFPE, sig_handle);
 #ifdef linux
     /*
     if (mkdir("/dev/input", 0777) == -1)
