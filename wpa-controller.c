@@ -79,7 +79,7 @@ int poll_wpa(struct wpa_process *process, int blocking) {
 
         /* This happens if wpa_supplicant quits */
         if (!bytes) {
-            ERROR("wpa_supplicant closed");
+            ERROR("wpa_supplicant shut down\n");
             return -1;
         }
 
@@ -135,6 +135,8 @@ struct wpa_process *start_wpa(char *ssid, char *key, char *iface) {
     signal(SIGCHLD, handle_chld);
     process->pid = fork();
     if (!process->pid) {
+        char *newargv[] = {"wpa_supplicant", "-Dwext", "-i", iface, "-c" CONFIG_FILE, NULL};
+        char *newargp[] = { NULL };
         close(p[0]);
         dup2(p[1], 1);
         dup2(p[1], 2);
@@ -144,7 +146,7 @@ struct wpa_process *start_wpa(char *ssid, char *key, char *iface) {
         setvbuf(stdin, NULL, _IOLBF, 0);
 
         printf("Hi there!\n");
-        execlp("wpa_supplicant", "-Dwext", "-i", iface, "-c" CONFIG_FILE, NULL);
+        execve("/usr/sbin/wpa_supplicant", newargv, newargp);
         PERROR("Unable to exec");
         exit(1);
     }
