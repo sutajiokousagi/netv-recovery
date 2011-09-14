@@ -534,9 +534,13 @@ int main(int argc, char **argv) {
     signal(SIGHUP, sig_handle);
     signal(SIGALRM, sig_handle);
 #ifdef linux
-    mkdir("/dev/input", 0777);
-    mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64));
-    mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65));
+    if (mkdir("/dev/input", 0777) == -1)
+        perror("Unable to mkdir /dev/input");
+    if (mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64)) == -1)
+        perror("Unable to mknod /dev/input/event0");
+    if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
+        perror("Unable to mknod /dev/input/event1");
+    fprintf(stderr, "Finished trying to set up /dev/input/\n");
     alarm(1);
 #endif
 
