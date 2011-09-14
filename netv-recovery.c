@@ -178,9 +178,12 @@ pick_ssid(char *item, void *_data)
     struct ap_description *ap;
 
     picker = (struct picker *)data->scene->elements[0].data;
-    ap = data->aps+picker->active_entry;
+    if (data->aps)
+        ap = data->aps+picker->active_entry;
+    else
+        ap = NULL;
 
-    if (!ap->populated) {
+    if (!ap || !ap->populated) {
         move_to_scene(data, TYPE_SSID);
     }
     else {
