@@ -322,6 +322,7 @@ static inline len_and_sockaddr* xhost2sockaddr(const char *host, int port)
 
 
 
+#if 0
 /* Read NMEMB bytes into PTR from STREAM.  Returns the number of bytes read,
  * and a short count if an eof or non-interrupt error is encountered.  */
 static size_t safe_fread(void *ptr, size_t nmemb, FILE *stream)
@@ -354,6 +355,7 @@ static char *safe_fgets(char *s, int size, FILE *stream)
 
 	return ret;
 }
+#endif
 
 static char* sanitize_string(char *s)
 {
@@ -483,6 +485,7 @@ static char *gethdr(char *buf, size_t bufsiz, FILE *fp /*, int *istrunc*/)
 }
 
 
+#if 0
 static int
 retrieve_file_data(struct globals *state,
                    FILE *dfp,
@@ -580,9 +583,10 @@ retrieve_file_data(struct globals *state,
 	progress(data, state->transferred, state->total_len);
 	return 0;
 }
+#endif
 
 
-int do_wget(char *url, int *total)
+FILE *do_wget(char *url, int *total)
 {
 	char buf[512];
 	struct host_info server, target;
@@ -635,11 +639,10 @@ int do_wget(char *url, int *total)
 
 	/* Open socket to http server */
 	sfp = open_socket(lsa);
-    if (!sfp)
-        return -1;
+	if (!sfp)
+		return NULL;
 
 	/* Send HTTP request */
-    ERROR("Accessing %s on %s range %d", target.path, target.host, state.beg_range);
 	fprintf(sfp, "GET /%s HTTP/1.1\r\n", target.path);
 
 	fprintf(sfp, "Host: %s\r\nUser-Agent: %s\r\n",
@@ -769,12 +772,12 @@ However, in real world it was observed that some web servers
 //			ERROR("bad redirection (no Location: header from server)");
 
 
-    ndelay_off(fileno(sfp));
+	ndelay_off(fileno(sfp));
 	clearerr(sfp);
-    ERROR("Chunked? %d", state.chunked);
-    if (total)
-        *total = state.total_len;
-    return fileno(sfp);
+	ERROR("Chunked? %d", state.chunked);
+	if (total)
+		*total = state.total_len;
+	return sfp;
 #if 0
 	if (retrieve_file_data(&state, sfp, progress, handle, data))
 		return -1;

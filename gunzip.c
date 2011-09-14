@@ -98,7 +98,7 @@ typedef struct state_t {
 	off_t gunzip_bytes_out; /* number of output bytes */
 	uint32_t gunzip_crc;
 
-	int gunzip_src_fd;
+	FILE *gunzip_src_file;
 	int (*update_progress)(void *dat, int sofar);
 	void *my_data;
 	unsigned total_read;
@@ -153,7 +153,7 @@ typedef struct state_t {
 #define update_progress     (S()update_progress    )
 #define my_data             (S()my_data            )
 #define total_read          (S()total_read         )
-#define gunzip_src_fd       (S()gunzip_src_fd      )
+#define gunzip_src_file     (S()gunzip_src_file    )
 #define gunzip_outbuf_count (S()gunzip_outbuf_count)
 #define gunzip_window       (S()gunzip_window      )
 #define gunzip_crc_table    (S()gunzip_crc_table   )
@@ -256,15 +256,22 @@ static inline void* xzalloc(size_t size)
     return ptr;
 }
 
-static inline ssize_t safe_read(int fd, void *buf, size_t count)
+/* Read NMEMB bytes into PTR from STREAM.  Returns the number of bytes read,
+ * and a short count if an eof or non-interrupt error is encountered.  */
+static size_t safe_fread(FILE *stream, void *ptr, size_t nmemb)
 {
-    ssize_t n;
+        size_t ret;
+        char *p = (char*)ptr;
 
-    do {
-        n = read(fd, buf, count);
-    } while (n < 0 && errno == EINTR);
+        do {
+                clearerr(stream);
+                errno = 0;
+                ret = fread(p, 1, nmemb, stream);
+                p += ret;
+                nmemb -= ret;
+        } while (nmemb && ferror(stream) && errno == EINTR);
 
-    return n;
+        return p - (char*)ptr;
 }
 
 static inline ssize_t safe_write(int fd, const void *buf, size_t count)
@@ -305,7 +312,7 @@ static inline ssize_t full_write(int fd, const void *buf, size_t len)
     return total;
 }
 
-static inline ssize_t full_read(int fd, void *buf, size_t len)
+static inline ssize_t full_read(FILE *fd, void *buf, size_t len)
 {
     ssize_t cc;
     ssize_t total;
@@ -313,7 +320,7 @@ static inline ssize_t full_read(int fd, void *buf, size_t len)
     total = 0;
 
     while (len) {
-        cc = safe_read(fd, buf, len);
+        cc = safe_fread(fd, buf, len);
 
         if (cc < 0) {
             if (total) {
@@ -411,7 +418,7 @@ static unsigned fill_bitbuffer(STATE_PARAM unsigned bitbuffer, unsigned *current
 				sz = to_read;
 			/* Leave the first 4 bytes empty so we can always unwind the bitbuffer
 			 * to the front of the bytebuffer */
-			bytebuffer_size = safe_read(gunzip_src_fd, &bytebuffer[4], sz);
+			bytebuffer_size = safe_fread(gunzip_src_file, &bytebuffer[4], sz);
 			if ((int)bytebuffer_size < 1) {
 				error_msg = "unexpected end of file";
 				abort_unzip(PASS_STATE_ONLY);
@@ -1126,7 +1133,7 @@ static int inflate_get_next_window(STATE_PARAM_ONLY)
 
 /* Called from unpack_gz_stream() and inflate_unzip() */
 static int
-inflate_unzip_internal(STATE_PARAM int in, int out)
+inflate_unzip_internal(STATE_PARAM FILE *in, int out)
 {
 	int n = 0;
 	ssize_t nwrote;
@@ -1135,7 +1142,7 @@ inflate_unzip_internal(STATE_PARAM int in, int out)
 	gunzip_window = malloc(GUNZIP_WSIZE);
 	gunzip_outbuf_count = 0;
 	gunzip_bytes_out = 0;
-	gunzip_src_fd = in;
+	gunzip_src_file = in;
 
 	/* (re) initialize state */
 	method = -1;
@@ -1197,7 +1204,7 @@ static int top_up(STATE_PARAM unsigned n)
 	if (count < (int)n) {
 		memmove(bytebuffer, &bytebuffer[bytebuffer_offset], count);
 		bytebuffer_offset = 0;
-		bytebuffer_size = full_read(gunzip_src_fd, &bytebuffer[count], bytebuffer_max - count);
+		bytebuffer_size = full_read(gunzip_src_file, &bytebuffer[count], bytebuffer_max - count);
 		if ((int)bytebuffer_size < 0) {
 			ERROR("Unable to read");
 			return 0;
@@ -1316,7 +1323,7 @@ static int check_header_gzip(STATE_PARAM unpack_info_t *info)
 }
 
 static int 
-unpack_gz_stream_with_info(int in, int out, unpack_info_t *info, int (*upd)(void *,int), void *dat)
+unpack_gz_stream_with_info(FILE *in, int out, unpack_info_t *info, int (*upd)(void *,int), void *dat)
 {
 	uint32_t v32;
 	int n;
@@ -1328,7 +1335,7 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info, int (*upd)(void
 	to_read = -1;
 //	bytebuffer_max = 0x8000;
 	bytebuffer = malloc(bytebuffer_max);
-	gunzip_src_fd = in;
+	gunzip_src_file = in;
 
     update_progress = upd;
     my_data = dat;
@@ -1383,25 +1390,29 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info, int (*upd)(void
 }
 
 int 
-unpack_gz_stream(int in, int out, int (*upd)(void *,int), void *dat)
+unpack_gz_stream(FILE *in, int out, int (*upd)(void *,int), void *dat)
 {
     /* Verify the stream is good */
     unsigned char magic[2];
     int res;
-    res = read(in, magic, sizeof(magic));
-    if (res != sizeof(magic)) {
-        PERROR("Couldn't read from in handle");
+    res = fread(magic, sizeof(magic), 1, in);
+    if (!res) {
+	if (ferror(in))
+		PERROR("Read %d.  Couldn't read from in handle", res);
+	else if (feof(in))
+		ERROR("Read %d.  End-of-file reached", res);
+	else
+		ERROR("Read %d.  Not eof, not error, what's wrong?", res);
         return -1;
     }
     if ((magic[0] != 0x1f) || (magic[1] != 0x8b)) {
         char bfr[4096];
         ERROR("Invalid gzip magic (wanted 0x1f8b  got 0x%02x%02x  res %d)\n", magic[0], magic[1], res);
         write(out, magic, res);
-        while ( (res=read(in, bfr, sizeof(bfr))) > 0)
+        while ( (res=fread(bfr, sizeof(bfr), 1, in)) > 0)
             write(out, bfr, res);
         return -1;
     }
-    return 0;
 	return unpack_gz_stream_with_info(in, out, NULL, upd, dat);
 }
 
@@ -1410,7 +1421,7 @@ unpack_gz_stream(int in, int out, int (*upd)(void *,int), void *dat)
 /* For unzip */
 
 int 
-inflate_unzip(inflate_unzip_result *res, off_t compr_size, int in, int out)
+inflate_unzip(inflate_unzip_result *res, off_t compr_size, FILE *in, int out)
 {
 	int n;
 	DECLARE_STATE;

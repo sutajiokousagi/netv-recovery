@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <zlib.h>
+#include <errno.h>
 
 #ifdef linux
 #include <sys/syscall.h>
@@ -29,6 +30,7 @@
 #include "dhcpc.h"
 #include "udev.h"
 #include "wget.h"
+#include "gunzip.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -57,6 +59,8 @@ struct recovery_data;
 #define MAKEPRESS(x) ((void (*)(void *, int))x)
 #define MAKEFUNC(x) ((void (*)(struct recovery_data *))x)
 
+#define PERROR(format, arg...)            \
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
 #define ERROR(format, arg...)            \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format, __func__, __LINE__, ## arg)
 #define NOTE(format, arg...)            \
@@ -89,7 +93,7 @@ struct recovery_data {
 
     struct ap_description *aps;
 
-    void *inf;
+    int data_size;
 
     int encryption_type;
     int should_quit;
@@ -217,7 +221,7 @@ pick_ssid(char *item, void *_data)
         }
         else if(ap->auth == AUTH_WPAPSK || ap->auth == AUTH_WPA2PSK) {
             data->encryption_type = ENC_WPA;
-            move_to_scene(data, SELECT_ENCRYPTION);
+            move_to_scene(data, TYPE_KEY);
         }
         else {
             move_to_scene(data, UNSUPPORTED_ENCRYPTION);
@@ -226,102 +230,55 @@ pick_ssid(char *item, void *_data)
     return 0;
 }
 
-static int
-my_zcat(void *_data, char *bytes, int len)
-{
-    struct recovery_data *data = _data;
-    static z_stream strm;
-    static int fd;
-    static char buffer[16384];
-    int ret;
-
-    if (!data->inf) {
-        bzero(&strm, sizeof(strm));
-        strm.zalloc   = Z_NULL;
-        strm.zfree    = Z_NULL;
-        strm.opaque   = Z_NULL;
-        strm.avail_in = 0;
-        strm.next_in  = Z_NULL;
-
-        data->inf     = &strm;
-
-        ret = inflateInit(&strm);
-        if (ret != Z_OK)
-            return ret;
-
-        fd = open("/dev/mmcblk0p2", O_WRONLY);
-        if (-1 == fd) {
-            perror("Unable to open /dev/mmcblk0p2");
-            return -1;
-        }
-    }
-
-    if (!len) {
-        (void)inflateEnd(&strm);
-        close(fd);
-        data->inf = NULL;
-        return 0;
-    }
-
-    strm.avail_in = len;
-    strm.next_in = (unsigned char *)bytes;
-    do {
-        strm.avail_out = sizeof(buffer);
-        strm.next_out = (unsigned char *)buffer;
-
-        ret = inflate(&strm, Z_NO_FLUSH);
-        switch (ret) {
-            case Z_NEED_DICT:
-                ret = Z_DATA_ERROR;     /* and fall through */
-            case Z_DATA_ERROR:
-            case Z_MEM_ERROR:
-                (void)inflateEnd(&strm);
-                ERROR("Unable to expand file: %d\n", ret);
-                return ret;
-        }
-        ret = write(fd, buffer, sizeof(buffer)-strm.avail_out);
-        if (ret == -1) {
-            perror("Unable to write");
-            return ret;
-        }
-        if (!ret) {
-            NOTE("Reached the end of the disk\n");
-            return -1;
-        }
-    } while(strm.avail_out == 0);
- 
-    return 0;
-}
 
 static int
-download_progress(void *_data, int current, int total)
+download_progress(void *_data, int current)
 {
     struct recovery_data *data = _data;
-    NOTE("Download progress %p: %d%% (%d/%d)\n", data, current*100/total, current, total);
+    NOTE("Download progress %p: %d%% (%d/%d)\n", data,
+	current*100/data->data_size, current, data->data_size);
     return 0;
 }
 
 static int
 do_download(struct recovery_data *data)
 {
+    FILE *in;
+    int out;
     int ret;
 
     redraw_scene(data);
 
     ret = prepare_partitions();
-    if (ret == -6) {
-        NOTE("Simulation mode detected");
-        move_to_scene(data, DONE);
-    }
-    else if (ret) {
+    if (ret && ret != -6) {
         ERROR("Unable to prepare disk: %d\n", ret);
         move_to_scene(data, UNRECOVERABLE);
+    }
+    else if (ret) {
+        NOTE("Simulation mode detected");
         return 0;
     }
-    else {
-        do_wget(IMAGE_URL, download_progress, my_zcat, data);
-        move_to_scene(data, DONE);
+
+    if (ret == -6)
+        out = open("output.bin", O_WRONLY | O_CREAT, 0777);
+    else
+        out = open("/dev/mmcblk0p2", O_WRONLY);
+    if (-1 == out) {
+        PERROR("Unable to open output file for compression");
+        return -1;
     }
+
+    in = do_wget(IMAGE_URL, &data->data_size);
+    if (in <= 0) {
+        perror("Couldn't wget");
+        return -1;
+    }
+
+    ret = unpack_gz_stream(in, out, download_progress, &data);
+    close(out);
+    fclose(in);
+
+    move_to_scene(data, DONE);
 
     return 0;
 }
