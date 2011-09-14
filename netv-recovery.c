@@ -26,6 +26,7 @@
 #include "ufdisk.h"
 #include "myifup.h"
 #include "dhcpc.h"
+#include "udev.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -757,6 +758,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Couldn't initialize SDL_TTF: %s\n", TTF_GetError());
         return 1;
     }
+
+    NOTE("Running udev...\n");
+    udev_main();
 
     NOTE("Setting up scenes...\n");
     setup_scenes(&data);
