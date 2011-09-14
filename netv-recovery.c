@@ -39,6 +39,10 @@
 #define OTHER_NETWORK_STRING "[Other Network]"
 struct recovery_data;
 
+#define MAKEDRAW(x) ((void (*)(void *, void *))x)
+#define MAKEPRESS(x) ((void (*)(void *, int))x)
+#define MAKEFUNC(x) ((void (*)(struct recovery_data *))x)
+
 struct scene_element {
     void (*draw)(void *data, void *screen);
     void (*press)(void *data, int key);
@@ -248,6 +252,7 @@ wait_a_bit(struct recovery_data *data)
     add_item_to_picker(picker, "Test 2 SSID");
     add_item_to_picker(picker, "Test 3 SSID");
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
+    return 0;
 }
 #endif
 
@@ -328,13 +333,6 @@ setup_scenes(struct recovery_data *data)
     picker->h = 500;
     picker->data = data;
     picker->pick_item = pick_ssid;
-    /*
-    add_item_to_picker(picker, "Lorem");
-    add_item_to_picker(picker, "ipsum");
-    add_item_to_picker(picker, "dolor");
-    add_item_to_picker(picker, "sit");
-    add_item_to_picker(picker, "dolum");
-    */
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
 
 
@@ -347,16 +345,16 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[0].id = SELECT_SSID;
     data->scenes[0].elements[0].data = picker;
-    data->scenes[0].elements[0].draw = redraw_picker;
-    data->scenes[0].elements[0].press = press_picker;
+    data->scenes[0].elements[0].draw = MAKEDRAW(redraw_picker);
+    data->scenes[0].elements[0].press = MAKEPRESS(press_picker);
     data->scenes[0].elements[1].data = textbox;
-    data->scenes[0].elements[1].draw = redraw_textbox;
+    data->scenes[0].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[0].num_elements = 2;
 #ifdef linux
-    data->scenes[0].function = run_ap_scan;
+    data->scenes[0].function = MAKEFUNC(run_ap_scan);
 #endif
 #ifdef __APPLE__
-    data->scenes[0].function = wait_a_bit;
+    data->scenes[0].function = MAKEFUNC(wait_a_bit);
 #endif
 
 
@@ -377,10 +375,10 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[1].id = TYPE_SSID;
     data->scenes[1].elements[0].data = kbd;
-    data->scenes[1].elements[0].draw = redraw_keyboard;
-    data->scenes[1].elements[0].press = press_keyboard;
+    data->scenes[1].elements[0].draw = MAKEDRAW(redraw_keyboard);
+    data->scenes[1].elements[0].press = MAKEPRESS(press_keyboard);
     data->scenes[1].elements[1].data = textbox;
-    data->scenes[1].elements[1].draw = redraw_textbox;
+    data->scenes[1].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[1].num_elements = 2;
 
 
@@ -405,10 +403,10 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[2].id = SELECT_ENCRYPTION;
     data->scenes[2].elements[0].data = picker;
-    data->scenes[2].elements[0].draw = redraw_picker;
-    data->scenes[2].elements[0].press = press_picker;
+    data->scenes[2].elements[0].draw = MAKEDRAW(redraw_picker);
+    data->scenes[2].elements[0].press = MAKEPRESS(press_picker);
     data->scenes[2].elements[1].data = textbox;
-    data->scenes[2].elements[1].draw = redraw_textbox;
+    data->scenes[2].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[2].num_elements = 2;
 
 
@@ -428,10 +426,10 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[3].id = TYPE_KEY;
     data->scenes[3].elements[0].data = kbd;
-    data->scenes[3].elements[0].draw = redraw_keyboard;
-    data->scenes[3].elements[0].press = press_keyboard;
+    data->scenes[3].elements[0].draw = MAKEDRAW(redraw_keyboard);
+    data->scenes[3].elements[0].press = MAKEPRESS(press_keyboard);
     data->scenes[3].elements[1].data = textbox;
-    data->scenes[3].elements[1].draw = redraw_textbox;
+    data->scenes[3].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[3].num_elements = 2;
 
 
@@ -447,9 +445,9 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[4].id = START_CONNECTING;
     data->scenes[4].elements[0].data = textbox;
-    data->scenes[4].elements[0].draw = redraw_textbox;
+    data->scenes[4].elements[0].draw = MAKEDRAW(redraw_textbox);
     data->scenes[4].num_elements = 1;
-    data->scenes[4].function = establish_connection;
+    data->scenes[4].function = MAKEFUNC(establish_connection);
 
 
 
@@ -463,7 +461,7 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[5].id = CONNECTED;
     data->scenes[5].elements[0].data = textbox;
-    data->scenes[5].elements[0].draw = redraw_textbox;
+    data->scenes[5].elements[0].draw = MAKEDRAW(redraw_textbox);
     data->scenes[5].num_elements = 1;
 
 
@@ -478,7 +476,7 @@ setup_scenes(struct recovery_data *data)
 
     data->scenes[6].id = CONNECTION_ERROR;
     data->scenes[6].elements[0].data = textbox;
-    data->scenes[6].elements[0].draw = redraw_textbox;
+    data->scenes[6].elements[0].draw = MAKEDRAW(redraw_textbox);
     data->scenes[6].num_elements = 1;
 
     return 0;
