@@ -113,10 +113,12 @@ prepare_partitions(void)
     mbr.partitions[1].lba_size = RFS_SIZE*2;
     mbr.partitions[1].type = 0x83;
 
+/*
     mbr.partitions[2].status = 0x00;
     mbr.partitions[2].lba_address = mbr.partitions[1].lba_address + mbr.partitions[1].lba_size;
     mbr.partitions[2].lba_size = last_sector - mbr.partitions[2].lba_address - 100;
     mbr.partitions[2].type = 0x83;
+*/
 
     if (-1 == lseek(fd, 0, SEEK_SET)) {
         perror("Unable to seek");

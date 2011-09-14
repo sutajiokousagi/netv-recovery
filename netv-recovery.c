@@ -17,6 +17,8 @@
 #include "sdl-textbox.h"
 #include "wpa-controller.h"
 #include "ap-scan.h"
+#include "ufdisk.h"
+#include "myifup.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -30,6 +32,8 @@
 #define CONNECTED 6
 #define CONNECTION_ERROR 7
 #define UNSUPPORTED_ENCRYPTION 8
+#define DOWNLOADING 9
+#define UNRECOVERABLE 10
 
 #define ENC_OPEN 0
 #define ENC_WPA 1
@@ -61,7 +65,7 @@ struct scene {
 struct recovery_data {
     SDL_Surface *screen;
     struct scene *scene;
-    struct scene scenes[10];
+    struct scene scenes[30];
 
     char *ssid;
     char *key;
@@ -204,6 +208,27 @@ pick_ssid(char *item, void *_data)
 }
 
 static int
+do_download(struct recovery_data *data)
+{
+    struct wpa_process *process;
+    int ret;
+
+    redraw_scene(data);
+
+    ret = prepare_partitions();
+    if (ret) {
+        fprintf(stderr, "Unable to prepare disk: %d\n", ret);
+        move_to_scene(data, UNRECOVERABLE);
+        return 0;
+    }
+
+    ret = system("busybox wget -O - http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz | zcat > /dev/mmcblk0p2");
+
+    return 0;
+}
+
+
+static int
 establish_connection(struct recovery_data *data)
 {
     struct wpa_process *process;
@@ -250,10 +275,20 @@ run_ap_scan(struct recovery_data *data)
     struct textbox *textbox = data->scene->elements[1].data;
     int i;
 
+    system("busybox insmod /modules/compat_firmware_class.ko");
+    system("busybox insmod /modules/compat.ko");
+    system("busybox insmod /modules/rfkill_backport.ko");
+    system("busybox insmod /modules/cfg80211.ko");
+    system("busybox insmod /modules/ath.ko");
+    system("busybox insmod /modules/ath.ko");
+    system("busybox insmod /modules/ath9k_common.ko");
+    system("busybox insmod /modules/mac80211.ko");
+    system("busybox insmod /modules/ath9k_htc.ko");
     clear_picker(picker);
     set_label_textbox(textbox, "Scanning for networks...");
     redraw_scene(data);
-    system("busybox ifconfig wlan0 up");
+    my_ifup("wlan0");
+    my_ifup("wlan1");
     data->aps = ap_scan();
 
     clear_picker(picker);
@@ -455,7 +490,7 @@ setup_scenes(struct recovery_data *data)
     textbox->w = 1000;
     textbox->h = 128;
     textbox->data = data;
-    set_label_textbox(textbox, "Status ");
+    set_label_textbox(textbox, "Status: ");
     set_text_textbox(textbox, "Connecting...");
 
     data->scenes[4].id = START_CONNECTING;
@@ -473,7 +508,7 @@ setup_scenes(struct recovery_data *data)
     textbox->w = 1000;
     textbox->h = 128;
     textbox->data = data;
-    set_label_textbox(textbox, "Status ");
+    set_label_textbox(textbox, "Status: ");
     set_text_textbox(textbox, "Connected");
 
     data->scenes[5].id = CONNECTED;
@@ -490,7 +525,7 @@ setup_scenes(struct recovery_data *data)
     textbox->w = 1000;
     textbox->h = 128;
     textbox->data = data;
-    set_label_textbox(textbox, "Status ");
+    set_label_textbox(textbox, "Status: ");
     set_text_textbox(textbox, "Error");
 
 
@@ -519,7 +554,7 @@ setup_scenes(struct recovery_data *data)
     textbox->w = 1000;
     textbox->h = 128;
     textbox->data = data;
-    set_label_textbox(textbox, "Status ");
+    set_label_textbox(textbox, "Status: ");
     set_text_textbox(textbox, "Unsupported network");
 
 
@@ -538,6 +573,64 @@ setup_scenes(struct recovery_data *data)
     data->scenes[7].elements[1].data = textbox2;
     data->scenes[7].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[7].num_elements = 2;
+
+
+
+    NOTE("Creating scene 9\n");
+    textbox = create_textbox();
+    textbox->x = 140;
+    textbox->y = 80;
+    textbox->w = 1000;
+    textbox->h = 128;
+    textbox->data = data;
+    set_label_textbox(textbox, "Status: ");
+    set_text_textbox(textbox, "Downloading...");
+
+
+    textbox2 = create_textbox();
+    textbox2->x = 140;
+    textbox2->y = 180;
+    textbox2->w = 1000;
+    textbox2->h = 128;
+    textbox2->data = data;
+    set_label_textbox(textbox2, "Downloading image.  Please wait...");
+
+    data->scenes[8].id = DOWNLOADING;
+    data->scenes[8].elements[0].data = textbox;
+    data->scenes[8].elements[0].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[8].elements[1].data = textbox2;
+    data->scenes[8].elements[1].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[8].num_elements = 2;
+    data->scenes[8].function = MAKEFUNC(do_download);
+
+
+
+    NOTE("Creating scene 10\n");
+    textbox = create_textbox();
+    textbox->x = 140;
+    textbox->y = 80;
+    textbox->w = 1000;
+    textbox->h = 128;
+    textbox->data = data;
+    set_label_textbox(textbox, "Status: ");
+    set_text_textbox(textbox, "Failed...");
+
+
+    textbox2 = create_textbox();
+    textbox2->x = 140;
+    textbox2->y = 180;
+    textbox2->w = 1000;
+    textbox2->h = 128;
+    textbox2->data = data;
+    set_label_textbox(textbox2, "Unrecoverable error");
+
+    data->scenes[9].id = UNRECOVERABLE;
+    data->scenes[9].elements[0].data = textbox;
+    data->scenes[9].elements[0].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[9].elements[1].data = textbox2;
+    data->scenes[9].elements[1].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[9].num_elements = 2;
+
 
     return 0;
 }

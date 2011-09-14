@@ -2,10 +2,10 @@ SOURCES=netv-recovery.c \
     keyboard.c sdl-keyboard.c \
     sdl-picker.c picker.c  \
     textbox.c sdl-textbox.c \
-    wpa-controller.c ap-scan.c ufdisk.c
+    wpa-controller.c ap-scan.c ufdisk.c myifup.c
 OBJECTS=$(SOURCES:.c=.o)
 EXEC=netv-recovery
-MY_CFLAGS += `pkg-config sdl --cflags` -Wall -g
+MY_CFLAGS += `pkg-config sdl --cflags` -Wall -g -Werror
 MY_LIBS += `pkg-config sdl --libs` -lSDL_ttf
 
 all: $(OBJECTS)
