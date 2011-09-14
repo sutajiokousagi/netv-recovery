@@ -6,7 +6,7 @@ SOURCES=netv-recovery.c \
     udev.c
 OBJECTS=$(SOURCES:.c=.o)
 EXEC=netv-recovery
-MY_CFLAGS += `pkg-config sdl --cflags` -Wall -g -Werror -O0
+MY_CFLAGS += `pkg-config sdl --cflags` -Wall -g -Werror -O0 -DDANGEROUS
 MY_LIBS += `pkg-config sdl --libs` -lSDL_ttf
 
 all: $(OBJECTS)
