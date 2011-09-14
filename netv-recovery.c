@@ -49,7 +49,7 @@
 #define ENC_OPEN 0
 #define ENC_WPA 1
 
-
+#define IMAGE_URL "http://175.41.134.235/build/silvermoon-netv/LATEST/disk-image.gz"
 #define OTHER_NETWORK_STRING "[Other Network]"
 struct recovery_data;
 
@@ -319,7 +319,7 @@ do_download(struct recovery_data *data)
         return 0;
     }
     else {
-        do_wget("http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz", download_progress, my_zcat, data);
+        do_wget(IMAGE_URL, download_progress, my_zcat, data);
         move_to_scene(data, DONE);
     }
 
