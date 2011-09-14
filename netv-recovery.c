@@ -463,7 +463,7 @@ setup_scenes(struct recovery_data *data)
     data->scenes[5].elements[0].draw = MAKEDRAW(redraw_textbox);
     data->scenes[5].num_elements = 1;
 
-
+    textbox2->data = data;
 
 
     textbox = create_textbox();
@@ -484,6 +484,8 @@ setup_scenes(struct recovery_data *data)
     textbox2->data = data;
     set_label_textbox(textbox2, "Press any key to try again");
 
+
+
     data->scenes[6].id = CONNECTION_ERROR;
     data->scenes[6].elements[0].data = textbox;
     data->scenes[6].elements[0].draw = MAKEDRAW(redraw_textbox);
@@ -491,6 +493,32 @@ setup_scenes(struct recovery_data *data)
     data->scenes[6].elements[1].data = textbox2;
     data->scenes[6].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[6].num_elements = 2;
+
+    textbox = create_textbox();
+    textbox->x = 140;
+    textbox->y = 80;
+    textbox->w = 1000;
+    textbox->h = 128;
+    textbox->data = data;
+    set_label_textbox(textbox, "Status ");
+    set_text_textbox(textbox, "Unsupported network");
+
+
+    textbox2 = create_textbox();
+    textbox2->x = 140;
+    textbox2->y = 180;
+    textbox2->w = 1000;
+    textbox2->h = 128;
+    textbox2->data = data;
+    set_label_textbox(textbox2, "Only unencrypted and WPA-encrypted networks are supported");
+
+    data->scenes[7].id = UNSUPPORTED_ENCRYPTION;
+    data->scenes[7].elements[0].data = textbox;
+    data->scenes[7].elements[0].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[7].elements[0].press= MAKEPRESS(try_again);
+    data->scenes[7].elements[1].data = textbox2;
+    data->scenes[7].elements[1].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[7].num_elements = 2;
 
     return 0;
 }
