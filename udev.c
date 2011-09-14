@@ -6,8 +6,15 @@
 #include <fcntl.h>
 #include <linux/netlink.h>
 
+#ifdef DBG
+#define DEBUG_ADD(format, arg...)            \
+    fprintf(stderr, format, __func__, __LINE__, ## arg)
 #define DEBUG(format, arg...)            \
     fprintf(stderr, "udev.c - %s():%d - " format, __func__, __LINE__, ## arg)
+#else
+#define DEBUG_ADD(format, arg...)
+#define DEBUG(format, arg...)
+#endif
 
 #define NOTE(format, arg...)            \
     fprintf(stderr, "udev.c - %s():%d - " format, __func__, __LINE__, ## arg)
@@ -56,8 +63,8 @@ int udev_main(void) {
 		DEBUG("Received %d bytes of data:\n", bytes);
 		DEBUG("    ");
 		for(byte=0; byte<bytes; byte++)
-			fprintf(stderr, "%c", data[byte]?data[byte]:'.');
-		fprintf(stderr, "\n");
+			DEBUG_ADD("%c", data[byte]?data[byte]:'.');
+		DEBUG_ADD("\n");
 	}
 
 
