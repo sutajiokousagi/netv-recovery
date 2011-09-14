@@ -534,6 +534,7 @@ int main(int argc, char **argv) {
     signal(SIGHUP, sig_handle);
     signal(SIGALRM, sig_handle);
 #ifdef linux
+    /*
     if (mkdir("/dev/input", 0777) == -1)
         perror("Unable to mkdir /dev/input");
     unlink("/dev/input/event0");
@@ -543,6 +544,7 @@ int main(int argc, char **argv) {
     if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
         perror("Unable to mknod /dev/input/event1");
     fprintf(stderr, "Finished trying to set up /dev/input/\n");
+    */
     alarm(1);
 #endif
 
@@ -552,7 +554,7 @@ int main(int argc, char **argv) {
     data.should_quit = 0;
 
     setenv("SDL_NOMOUSE", "1", 1);
-    if (SDL_Init(SDL_INIT_EVERYTHING)) {
+    if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO)) {
         fprintf(stderr, "Couldn't initialize SDL: %s\n", SDL_GetError());
         return 1;
     }
