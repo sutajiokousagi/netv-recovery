@@ -65,7 +65,7 @@
 #define LOG1(format, arg...)
 
 #define NOTE(format, arg...)            \
-    fprintf(stderr, "dhcpc.c - %s():%d - " format, __func__, __LINE__, ## arg)
+    fprintf(stderr, "dhcpc.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
 
 #define ERROR(format, arg...)            \
     fprintf(stderr, "dhcpc.c - %s():%d - " format, __func__, __LINE__, ## arg)
