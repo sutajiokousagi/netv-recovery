@@ -282,6 +282,9 @@ establish_connection(struct recovery_data *data)
 static int my_init_module(char *path) {
     int fd = open(path, O_RDONLY);
     struct stat st;
+    int ret;
+
+    NOTE("Loading module %s\n", path);
     if (!fd) {
         perror("Unable to open module");
         return -1;
@@ -296,7 +299,10 @@ static int my_init_module(char *path) {
     }
     close(fd);
 
-    return init_module(dat, sizeof(dat), "");
+    ret = init_module(dat, sizeof(dat), "");
+    if (ret)
+        perror("Unable to load module");
+    return ret;
 }
 
 static int
