@@ -16,10 +16,7 @@
 #include "sdl-picker.h"
 #include "sdl-textbox.h"
 #include "wpa-controller.h"
-
-#ifdef linux
 #include "ap-scan.h"
-#endif
 
 #define ICON_W 64
 #define ICON_H 64
@@ -32,6 +29,7 @@
 #define START_CONNECTING 5
 #define CONNECTED 6
 #define CONNECTION_ERROR 7
+#define UNSUPPORTED_ENCRYPTION 8
 
 #define ENC_OPEN 0
 #define ENC_WPA 1
@@ -56,7 +54,6 @@ struct scene {
     void (*function)(struct recovery_data *data);
 };
 
-
 struct recovery_data {
     SDL_Surface *screen;
     struct scene *scene;
@@ -65,9 +62,12 @@ struct recovery_data {
     char *ssid;
     char *key;
 
+    struct ap_description *aps;
+
     int encryption_type;
     int should_quit;
 };
+
 
 
 static int
@@ -75,6 +75,7 @@ move_to_scene(struct recovery_data *data, int scene);
 
 static int
 redraw_scene(struct recovery_data *data);
+
 
 
 
@@ -95,6 +96,7 @@ set_key(struct recovery_data *data, char *str)
     data->key = malloc(strlen(str)+1);
     strcpy(data->key, str);
 }
+
 
 static int
 pressed_key(int key, void *_data)
@@ -169,15 +171,27 @@ pick_ssid(char *item, void *_data)
 {
     struct recovery_data *data = _data;
     struct picker *picker;
+    struct ap_description *ap;
 
     picker = (struct picker *)data->scene->elements[0].data;
+    ap = data->aps+picker->active_entry;
 
-    if (picker->active_entry == picker->entry_count-1) {
+    if (!ap->populated) {
         move_to_scene(data, TYPE_SSID);
     }
     else {
-        set_ssid(data, item);
-        move_to_scene(data, SELECT_ENCRYPTION);
+        set_ssid(data, ap->ssid);
+        if (ap->auth == AUTH_OPEN) {
+            data->encryption_type = ENC_OPEN;
+            move_to_scene(data, START_CONNECTING);
+        }
+        else if(ap->auth == AUTH_WPAPSK || ap->auth == AUTH_WPA2PSK) {
+            data->encryption_type = ENC_WPA;
+            move_to_scene(data, SELECT_ENCRYPTION);
+        }
+        else {
+            move_to_scene(data, UNSUPPORTED_ENCRYPTION);
+        }
     }
     return 0;
 }
@@ -222,41 +236,37 @@ establish_connection(struct recovery_data *data)
     return 0;
 }
 
-#ifdef linux
 static int
 run_ap_scan(struct recovery_data *data)
 {
-    struct ap_description *aps;
     struct picker *picker = data->scene->elements[0].data;
+    struct textbox *textbox = data->scene->elements[1].data;
     int i;
 
+    clear_picker(picker);
+    set_label_textbox(textbox, "Scanning for networks...");
     redraw_scene(data);
     system("busybox ifconfig wlan0 up");
-    aps = ap_scan();
+    data->aps = ap_scan();
 
     clear_picker(picker);
-    for (i=0; aps && aps[i].populated; i++)
-        add_item_to_picker(picker, aps[i].ssid);
+    for (i=0; data->aps && data->aps[i].populated; i++)
+        add_item_to_picker(picker, data->aps[i].ssid);
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
-}
-#endif
-#ifdef __APPLE__
-static int
-wait_a_bit(struct recovery_data *data)
-{
-    struct picker *picker = data->scene->elements[0].data;
-    redraw_scene(data);
-    sleep(1);
-    clear_picker(picker);
-    add_item_to_picker(picker, "Test SSID");
-    add_item_to_picker(picker, "Test 2 SSID");
-    add_item_to_picker(picker, "Test 3 SSID");
-    add_item_to_picker(picker, OTHER_NETWORK_STRING);
+
+    set_label_textbox(textbox, "Select network:");
     return 0;
 }
-#endif
 
-static void sig_handle(int sig) {
+void
+try_again(struct textbox *txt, int key)
+{
+    move_to_scene(txt->data, SELECT_SSID);
+}
+
+static void
+sig_handle(int sig)
+{
     fprintf(stderr, "Got sig %d\n", sig);
     if (sig == SIGTERM) {
         SDL_Quit();
@@ -264,18 +274,6 @@ static void sig_handle(int sig) {
     }
 }
 
-#ifdef linux
-static void
-fix_tty(char *tty_name)
-{
-    int tty;
-    tty = open(tty_name, O_RDWR);
-    if (tty >= 0) {
-        ioctl(tty, KDSETMODE, KD_TEXT);
-        close(tty);
-    }
-}
-#endif
 
 
 static int
@@ -324,6 +322,7 @@ setup_scenes(struct recovery_data *data)
     struct keyboard *kbd;
     struct picker *picker;
     struct textbox *textbox;
+    struct textbox *textbox2;
 
     /* Select SSID */
     picker = create_picker();
@@ -333,7 +332,6 @@ setup_scenes(struct recovery_data *data)
     picker->h = 500;
     picker->data = data;
     picker->pick_item = pick_ssid;
-    add_item_to_picker(picker, OTHER_NETWORK_STRING);
 
 
     textbox = create_textbox();
@@ -341,7 +339,8 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
-    set_text_textbox(textbox, "Scanning for networks...");
+    textbox->data = data;
+    set_label_textbox(textbox, "Scanning for networks...");
 
     data->scenes[0].id = SELECT_SSID;
     data->scenes[0].elements[0].data = picker;
@@ -350,12 +349,7 @@ setup_scenes(struct recovery_data *data)
     data->scenes[0].elements[1].data = textbox;
     data->scenes[0].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[0].num_elements = 2;
-#ifdef linux
     data->scenes[0].function = MAKEFUNC(run_ap_scan);
-#endif
-#ifdef __APPLE__
-    data->scenes[0].function = MAKEFUNC(wait_a_bit);
-#endif
 
 
 
@@ -370,6 +364,7 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 180;
     textbox->w = 1000;
     textbox->h = 128;
+    textbox->data = data;
     set_label_textbox(textbox, "Network name: ");
     set_text_textbox(textbox, "");
 
@@ -396,6 +391,7 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
+    textbox->data = data;
     set_label_textbox(textbox, "Select encryption type");
 
     add_item_to_picker(picker, "Open");
@@ -422,6 +418,7 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
+    textbox->data = data;
     set_label_textbox(textbox, "Password: ");
 
     data->scenes[3].id = TYPE_KEY;
@@ -440,6 +437,7 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
+    textbox->data = data;
     set_label_textbox(textbox, "Status ");
     set_text_textbox(textbox, "Connecting...");
 
@@ -456,6 +454,7 @@ setup_scenes(struct recovery_data *data)
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
+    textbox->data = data;
     set_label_textbox(textbox, "Status ");
     set_text_textbox(textbox, "Connected");
 
@@ -466,18 +465,32 @@ setup_scenes(struct recovery_data *data)
 
 
 
+
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
     textbox->w = 1000;
     textbox->h = 128;
+    textbox->data = data;
     set_label_textbox(textbox, "Status ");
     set_text_textbox(textbox, "Error");
+
+
+    textbox2 = create_textbox();
+    textbox2->x = 140;
+    textbox2->y = 180;
+    textbox2->w = 1000;
+    textbox2->h = 128;
+    textbox2->data = data;
+    set_label_textbox(textbox2, "Press any key to try again");
 
     data->scenes[6].id = CONNECTION_ERROR;
     data->scenes[6].elements[0].data = textbox;
     data->scenes[6].elements[0].draw = MAKEDRAW(redraw_textbox);
-    data->scenes[6].num_elements = 1;
+    data->scenes[6].elements[0].press= MAKEPRESS(try_again);
+    data->scenes[6].elements[1].data = textbox2;
+    data->scenes[6].elements[1].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[6].num_elements = 2;
 
     return 0;
 }
@@ -503,16 +516,6 @@ int main(int argc, char **argv) {
     unlink("/dev/tty6");
     unlink("/dev/tty7");
     unlink("/dev/tty8");
-/*
-    unlink("/dev/tty");
-    mknod("/dev/tty", S_IFCHR | 0777, makedev(4, 0));
-    fix_tty("/dev/tty");
-    fix_tty("/dev/tty0");
-    fix_tty("/dev/tty1");
-    fix_tty("/dev/tty2");
-    fix_tty("/dev/tty3");
-    fix_tty("/dev/tty4");
-*/
 #endif
 
     bzero(&e, sizeof(e));
