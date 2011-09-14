@@ -107,7 +107,7 @@ int poll_wpa(struct wpa_process *process, int blocking) {
 }
 
 /* Starts wpa_supplicant.  For OPEN network, pass a NULL key. */
-struct wpa_process *start_wpa(char *ssid, char *key) {
+struct wpa_process *start_wpa(char *ssid, char *key, char *iface) {
     struct wpa_process *process = malloc(sizeof(struct wpa_process));
     bzero(process, sizeof(*process));
 
@@ -136,7 +136,7 @@ struct wpa_process *start_wpa(char *ssid, char *key) {
         setvbuf(stdin, NULL, _IOLBF, 0);
 
         printf("Hi there!\n");
-        execlp("wpa_supplicant", "-Dwext", "-iwlan0", "-c" CONFIG_FILE, NULL);
+        execlp("wpa_supplicant", "-Dwext", "-i", iface, "-c" CONFIG_FILE, NULL);
         perror("Unable to exec");
         exit(1);
     }

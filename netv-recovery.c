@@ -256,7 +256,7 @@ establish_connection(struct recovery_data *data)
 
     redraw_scene(data);
 
-    process = start_wpa(data->ssid, data->encryption_type==ENC_WPA ? data->key : NULL);
+    process = start_wpa(data->ssid, data->encryption_type==ENC_WPA ? data->key : NULL, data->ifname);
     if (!process) {
         fprintf(stderr, "Couldn't start WPA\n");
         move_to_scene(data, SELECT_ENCRYPTION);
