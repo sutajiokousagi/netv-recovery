@@ -1,4 +1,4 @@
-#ifdef linux
+#if defined(linux) && defined(DANGEROUS)
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,4 +150,4 @@ prepare_partitions(void)
 {
     return -6;
 }
-#endif /* linux */
+#endif /* linux && DANGEROUS */
