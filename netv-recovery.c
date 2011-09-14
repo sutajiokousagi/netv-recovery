@@ -39,6 +39,8 @@
 #define ENC_OPEN 0
 #define ENC_WPA 1
 
+char *ifname;
+
 #define OTHER_NETWORK_STRING "[Other Network]"
 struct recovery_data;
 
@@ -255,8 +257,10 @@ establish_connection(struct recovery_data *data)
         stop_wpa(process);
     }
     else {
-        fprintf(stderr, "Obtaining IP...\n");
-        if (system("busybox udhcpc -i wlan0")) {
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd)-1, "busybox udhcpc -i %s", ifname);
+        NOTE("Obtaining IP for interface %s\n", ifname);
+        if (system(cmd)) {
             fprintf(stderr, "Connection error: %d\n", ret);
             move_to_scene(data, CONNECTION_ERROR);
         }
@@ -288,9 +292,16 @@ run_ap_scan(struct recovery_data *data)
     clear_picker(picker);
     set_label_textbox(textbox, "Scanning for networks...");
     redraw_scene(data);
-    my_ifup("wlan0");
-    my_ifup("wlan1");
-    data->aps = ap_scan();
+    if (!my_ifup("wlan0"))
+        ifname = "wlan0";
+    else if (!my_ifup("wlan1"))
+        ifname = "wlan1";
+    else if (!my_ifup("wlan2"))
+        ifname = "wlan2";
+    else if (!my_ifup("wlan3"))
+        ifname = "wlan3";
+    NOTE("Found interface %s\n", ifname);
+    data->aps = ap_scan(ifname);
 
     clear_picker(picker);
     for (i=0; data->aps && data->aps[i].populated; i++)

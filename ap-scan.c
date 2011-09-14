@@ -1438,12 +1438,14 @@ print_scanning_info(int skfd, char *ifname, char *ssid, int immediate) {
 
 /******************************* MAIN ********************************/
 
-struct ap_description *ap_scan() {
+struct ap_description *ap_scan(char *dev) {
     int   skfd;                         /* generic raw socket desc.     */
-    char *dev       = DEFAULT_DEVICE;   /* device name                  */
     int   immediate = 0;                /* Whether to wait for a scan   */
     int   printed = 0;
     int   print_try;
+
+    if (!dev)
+        dev = DEFAULT_DEVICE;
 
     free(found_aps);
     found_ap_count = 0;
@@ -1495,7 +1497,7 @@ struct ap_description *ap_scan() {
 
 static struct ap_description aps[4];
 
-struct ap_description *ap_scan() {
+struct ap_description *ap_scan(char *dev) {
     sleep(1);
     strncpy(aps[0].ssid, "Test AP 1", sizeof(aps[0].ssid));
     strncpy(aps[1].ssid, "Test AP 2", sizeof(aps[1].ssid));

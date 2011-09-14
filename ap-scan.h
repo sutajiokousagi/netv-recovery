@@ -34,5 +34,5 @@ struct ap_description {
     int                         printed;
 };
 
-struct ap_description *ap_scan(void);
+struct ap_description *ap_scan(char *ifname);
 #endif /* __AP_SCAN_H__ */
