@@ -55,6 +55,8 @@ struct recovery_data;
 #define MAKEPRESS(x) ((void (*)(void *, int))x)
 #define MAKEFUNC(x) ((void (*)(struct recovery_data *))x)
 
+#define ERROR(format, arg...)            \
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format, __func__, __LINE__, ## arg)
 #define NOTE(format, arg...)            \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format, __func__, __LINE__, ## arg)
 
@@ -228,14 +230,19 @@ do_download(struct recovery_data *data)
     redraw_scene(data);
 
     ret = prepare_partitions();
-    if (ret) {
-        fprintf(stderr, "Unable to prepare disk: %d\n", ret);
+    if (ret == -6) {
+        NOTE("Simulation mode detected");
+        move_to_scene(data, DONE);
+    }
+    else if (ret) {
+        ERROR("Unable to prepare disk: %d\n", ret);
         move_to_scene(data, UNRECOVERABLE);
         return 0;
     }
-
-    ret = system("busybox wget -O - http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz | zcat > /dev/mmcblk0p2");
-    move_to_scene(data, DONE);
+    else {
+        ret = system("busybox wget -O - http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz | zcat > /dev/mmcblk0p2");
+        move_to_scene(data, DONE);
+    }
 
     return 0;
 }
@@ -283,12 +290,13 @@ establish_connection(struct recovery_data *data)
 }
 
 static int my_init_module(char *path) {
-    int fd = open(path, O_RDONLY);
+    int fd;
     struct stat st;
     int ret;
 
     NOTE("Loading module %s\n", path);
-    if (!fd) {
+    fd = open(path, O_RDONLY);
+    if (fd == -1) {
         perror("Unable to open module");
         return -1;
     }
@@ -315,15 +323,6 @@ run_ap_scan(struct recovery_data *data)
     struct textbox *textbox = data->scene->elements[1].data;
     int i;
 
-    my_init_module("/modules/compat_firmware_class.ko");
-    my_init_module("/modules/compat.ko");
-    my_init_module("/modules/rfkill_backport.ko");
-    my_init_module("/modules/cfg80211.ko");
-    my_init_module("/modules/ath.ko");
-    my_init_module("/modules/ath9k_hw.ko");
-    my_init_module("/modules/ath9k_common.ko");
-    my_init_module("/modules/mac80211.ko");
-    my_init_module("/modules/ath9k_htc.ko");
     clear_picker(picker);
     set_label_textbox(textbox, "Scanning for networks...");
     redraw_scene(data);
@@ -763,6 +762,17 @@ int main(int argc, char **argv) {
 
     NOTE("Running udev...\n");
     udev_main();
+
+    NOTE("Loading modules...\n");
+    my_init_module("/modules/compat_firmware_class.ko");
+    my_init_module("/modules/compat.ko");
+    my_init_module("/modules/rfkill_backport.ko");
+    my_init_module("/modules/cfg80211.ko");
+    my_init_module("/modules/ath.ko");
+    my_init_module("/modules/ath9k_hw.ko");
+    my_init_module("/modules/ath9k_common.ko");
+    my_init_module("/modules/mac80211.ko");
+    my_init_module("/modules/ath9k_htc.ko");
 
     NOTE("Setting up scenes...\n");
     setup_scenes(&data);
