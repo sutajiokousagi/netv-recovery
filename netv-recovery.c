@@ -339,8 +339,10 @@ run_ap_scan(struct recovery_data *data)
     data->aps = ap_scan(data->ifname);
 
     clear_picker(picker);
-    for (i=0; data->aps && data->aps[i].populated; i++)
+    for (i=0; data->aps && data->aps[i].populated; i++) {
+        NOTE("Found AP[%d]: %s\n", i, data->aps[i].ssid);
         add_item_to_picker(picker, data->aps[i].ssid);
+    }
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
 
     set_label_textbox(textbox, "Select network:");
