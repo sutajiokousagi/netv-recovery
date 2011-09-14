@@ -25,6 +25,7 @@
 #include "ap-scan.h"
 #include "ufdisk.h"
 #include "myifup.h"
+#include "dhcpc.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -45,7 +46,6 @@
 #define ENC_OPEN 0
 #define ENC_WPA 1
 
-char *ifname;
 
 #define OTHER_NETWORK_STRING "[Other Network]"
 struct recovery_data;
@@ -78,6 +78,9 @@ struct recovery_data {
 
     char *ssid;
     char *key;
+    char *ifname;
+
+    int dhcpc_pid;
 
     struct ap_description *aps;
 
@@ -263,14 +266,13 @@ establish_connection(struct recovery_data *data)
         stop_wpa(process);
     }
     else {
-        char cmd[256];
-        snprintf(cmd, sizeof(cmd)-1, "busybox udhcpc -i %s", ifname);
-        NOTE("Obtaining IP for interface %s\n", ifname);
-        if (system(cmd)) {
-            fprintf(stderr, "Connection error: %d\n", ret);
+        NOTE("Obtaining IP for interface %s\n", data->ifname);
+	data->dhcpc_pid = udhcpc_main(data->ifname);
+        if (data->dhcpc_pid < 0) {
+            NOTE("Connection error: %d\n", data->dhcpc_pid);
             move_to_scene(data, CONNECTION_ERROR);
         }
-        fprintf(stderr, "Connected!\n");
+        NOTE("Connected!\n");
         move_to_scene(data, CONNECTED);
     }
 
@@ -325,15 +327,15 @@ run_ap_scan(struct recovery_data *data)
     set_label_textbox(textbox, "Scanning for networks...");
     redraw_scene(data);
     if (!my_ifup("wlan0"))
-        ifname = "wlan0";
+        data->ifname = "wlan0";
     else if (!my_ifup("wlan1"))
-        ifname = "wlan1";
+        data->ifname = "wlan1";
     else if (!my_ifup("wlan2"))
-        ifname = "wlan2";
+        data->ifname = "wlan2";
     else if (!my_ifup("wlan3"))
-        ifname = "wlan3";
-    NOTE("Found interface %s\n", ifname);
-    data->aps = ap_scan(ifname);
+        data->ifname = "wlan3";
+    NOTE("Found interface %s\n", data->ifname);
+    data->aps = ap_scan(data->ifname);
 
     clear_picker(picker);
     for (i=0; data->aps && data->aps[i].populated; i++)
