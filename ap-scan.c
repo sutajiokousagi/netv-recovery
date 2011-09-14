@@ -86,6 +86,7 @@ const char * const iw_operation_mode[] = {
     "Unknown/bug"
 };
 
+/*
 static const char *chumby_encryptions[] = {
     "NONE",
     "WEP",
@@ -101,6 +102,7 @@ static const char *chumby_auths[] = {
     "WPA2EAP",
     "WPAEAP",
 };
+*/
 
 
 
@@ -995,6 +997,7 @@ static void handle_wpa_rsn(struct ap_description *ap, uint8_t *ie_data,
     }
 }
 
+#if 0
 static char *wps_string(struct ap_description *ap) {
     static char wps_description[128];
     int components = 0;
@@ -1015,6 +1018,7 @@ static char *wps_string(struct ap_description *ap) {
 
     return wps_description;
 }
+#endif
 
 static void print_ap(struct ap_description *ap) {
     found_ap_count++;
@@ -1431,17 +1435,6 @@ print_scanning_info(int skfd, char *ifname, char *ssid, int immediate) {
 
 
 
-
-static int print_help(char *progname) {
-    fprintf(stderr,
-            "Usage: %s -i [interface] -n -s [ssid]\n"
-            "Parameters:\n"
-            "    -i  Specify which interface to scan\n"
-            "    -s  Search for the specified SSID\n"
-            "    -n  Don't wait for a scan, return the most recent results\n"
-            "", progname);
-    return 1;
-}
 
 /******************************* MAIN ********************************/
 
