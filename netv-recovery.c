@@ -319,7 +319,7 @@ run_ap_scan(struct recovery_data *data)
     my_init_module("/modules/rfkill_backport.ko");
     my_init_module("/modules/cfg80211.ko");
     my_init_module("/modules/ath.ko");
-    my_init_module("/modules/ath.ko");
+    my_init_module("/modules/ath_hw.ko");
     my_init_module("/modules/ath9k_common.ko");
     my_init_module("/modules/mac80211.ko");
     my_init_module("/modules/ath9k_htc.ko");
