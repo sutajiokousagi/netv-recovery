@@ -1,4 +1,4 @@
-
+#include <stdio.h>
 #include <SDL/SDL.h>
 #include <SDL_ttf.h>
 #include <unistd.h>
@@ -40,6 +40,10 @@ struct recovery_data;
 #define MAKEDRAW(x) ((void (*)(void *, void *))x)
 #define MAKEPRESS(x) ((void (*)(void *, int))x)
 #define MAKEFUNC(x) ((void (*)(struct recovery_data *))x)
+
+#define NOTE(format, arg...)            \
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format, __func__, __LINE__, ## arg)
+
 
 struct scene_element {
     void (*draw)(void *data, void *screen);
@@ -267,7 +271,7 @@ try_again(struct textbox *txt, int key)
 static void
 sig_handle(int sig)
 {
-    fprintf(stderr, "Got sig %d\n", sig);
+    NOTE("Got signal %d\n", sig);
     if (sig == SIGTERM) {
         SDL_Quit();
         exit(1);
@@ -553,20 +557,22 @@ int main(int argc, char **argv) {
 
     data.should_quit = 0;
 
-    setenv("SDL_NOMOUSE", "1", 1);
+    NOTE("Initializing SDL...\n");
     if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO)) {
         fprintf(stderr, "Couldn't initialize SDL: %s\n", SDL_GetError());
         return 1;
     }
 
+    NOTE("Initializing TTF engine...\n");
     if (TTF_Init()) {
         fprintf(stderr, "Couldn't initialize SDL_TTF: %s\n", TTF_GetError());
         return 1;
     }
 
+    NOTE("Setting up scenes...\n");
     setup_scenes(&data);
 
-
+    NOTE("Setting video mode...\n");
     data.screen = SDL_SetVideoMode(1280, 720, 16, 0);
     alarm(0);
     if (!data.screen) {
@@ -574,9 +580,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    NOTE("Moving to scene %d\n", SELECT_SSID);
     move_to_scene(&data, SELECT_SSID);
     redraw_scene(&data);
 
+    NOTE("Entering main loop\n");
     while (!data.should_quit) {
 
         SDL_WaitEvent(&e);
