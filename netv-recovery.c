@@ -211,7 +211,6 @@ pick_ssid(char *item, void *_data)
 static int
 do_download(struct recovery_data *data)
 {
-    struct wpa_process *process;
     int ret;
 
     redraw_scene(data);
