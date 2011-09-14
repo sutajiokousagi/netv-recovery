@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <zlib.h>
 
 #ifdef linux
 #include <sys/syscall.h>
@@ -27,6 +28,7 @@
 #include "myifup.h"
 #include "dhcpc.h"
 #include "udev.h"
+#include "wget.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -86,6 +88,8 @@ struct recovery_data {
     int dhcpc_pid;
 
     struct ap_description *aps;
+
+    void *inf;
 
     int encryption_type;
     int should_quit;
@@ -223,6 +227,81 @@ pick_ssid(char *item, void *_data)
 }
 
 static int
+my_zcat(void *_data, char *bytes, int len)
+{
+    struct recovery_data *data = _data;
+    static z_stream strm;
+    static int fd;
+    static char buffer[16384];
+    int ret;
+
+    if (!data->inf) {
+        bzero(&strm, sizeof(strm));
+        strm.zalloc   = Z_NULL;
+        strm.zfree    = Z_NULL;
+        strm.opaque   = Z_NULL;
+        strm.avail_in = 0;
+        strm.next_in  = Z_NULL;
+
+        data->inf     = &strm;
+
+        ret = inflateInit(&strm);
+        if (ret != Z_OK)
+            return ret;
+
+        fd = open("/dev/mmcblk0p2", O_WRONLY);
+        if (-1 == fd) {
+            perror("Unable to open /dev/mmcblk0p2");
+            return -1;
+        }
+    }
+
+    if (!len) {
+        (void)inflateEnd(&strm);
+        close(fd);
+        data->inf = NULL;
+        return 0;
+    }
+
+    strm.avail_in = len;
+    strm.next_in = (unsigned char *)bytes;
+    do {
+        strm.avail_out = sizeof(buffer);
+        strm.next_out = (unsigned char *)buffer;
+
+        ret = inflate(&strm, Z_NO_FLUSH);
+        switch (ret) {
+            case Z_NEED_DICT:
+                ret = Z_DATA_ERROR;     /* and fall through */
+            case Z_DATA_ERROR:
+            case Z_MEM_ERROR:
+                (void)inflateEnd(&strm);
+                ERROR("Unable to expand file: %d\n", ret);
+                return ret;
+        }
+        ret = write(fd, buffer, sizeof(buffer)-strm.avail_out);
+        if (ret == -1) {
+            perror("Unable to write");
+            return ret;
+        }
+        if (!ret) {
+            NOTE("Reached the end of the disk\n");
+            return -1;
+        }
+    } while(strm.avail_out == 0);
+ 
+    return 0;
+}
+
+static int
+download_progress(void *_data, int current, int total)
+{
+    struct recovery_data *data = _data;
+    NOTE("Download progress %p: %d%% (%d/%d)\n", data, current*100/total, current, total);
+    return 0;
+}
+
+static int
 do_download(struct recovery_data *data)
 {
     int ret;
@@ -240,13 +319,21 @@ do_download(struct recovery_data *data)
         return 0;
     }
     else {
-        ret = system("busybox wget -O - http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz | zcat > /dev/mmcblk0p2");
+        do_wget("http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz", download_progress, my_zcat, data);
         move_to_scene(data, DONE);
     }
 
     return 0;
 }
 
+static int
+wait_a_sec(struct recovery_data *data)
+{
+    redraw_scene(data);
+    sleep(1);
+    move_to_scene(data, DOWNLOADING);
+    return 0;
+}
 
 static int
 establish_connection(struct recovery_data *data)
@@ -562,6 +649,7 @@ setup_scenes(struct recovery_data *data)
     data->scenes[5].id = CONNECTED;
     data->scenes[5].elements[0].data = textbox;
     data->scenes[5].elements[0].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[5].function = MAKEFUNC(wait_a_sec);
     data->scenes[5].num_elements = 1;
 
 
