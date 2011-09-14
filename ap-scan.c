@@ -1,3 +1,6 @@
+#include "ap-scan.h"
+
+#ifdef linux
 /*
  *      Wireless Tools
  *
@@ -14,7 +17,6 @@
 #include <sys/time.h>
 #include <net/ethernet.h>   /* struct ether_addr */
 #include "iwlib.h"              /* Header */
-#include "ap-scan.h"
 
 #define DEFAULT_DEVICE "wlan0"
 
@@ -83,6 +85,23 @@ const char * const iw_operation_mode[] = {
     "Monitor",
     "Unknown/bug"
 };
+
+static const char *chumby_encryptions[] = {
+    "NONE",
+    "WEP",
+    "AES",
+    "TKIP",
+};
+
+static const char *chumby_auths[] = {
+    "OPEN",
+    "WEPAUTO",
+    "WPA2PSK",
+    "WPAPSK",
+    "WPA2EAP",
+    "WPAEAP",
+};
+
 
 
 /**************************** CONSTANTS ****************************/
@@ -1477,3 +1496,23 @@ struct ap_description *ap_scan() {
 
     return found_aps;
 }
+#else
+#include <string.h>
+#include <unistd.h>
+
+static struct ap_description aps[4];
+
+struct ap_description *ap_scan() {
+    sleep(1);
+    strncpy(aps[0].ssid, "Test AP 1", sizeof(aps[0].ssid));
+    strncpy(aps[1].ssid, "Test AP 2", sizeof(aps[1].ssid));
+    strncpy(aps[2].ssid, "Test AP 3", sizeof(aps[2].ssid));
+    aps[0].populated = 1;
+    aps[1].populated = 1;
+    aps[2].populated = 1;
+    aps[3].populated = 0;
+
+    return aps;
+}
+
+#endif

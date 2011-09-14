@@ -2,22 +2,6 @@
 #define __AP_SCAN_H__
 
 
-static const char *chumby_encryptions[] = {
-    "NONE",
-    "WEP",
-    "AES",
-    "TKIP",
-};
-
-static const char *chumby_auths[] = {
-    "OPEN",
-    "WEPAUTO",
-    "WPA2PSK",
-    "WPAPSK",
-    "WPA2EAP",
-    "WPAEAP",
-};
-
 enum chumby_encryption_type {
     ENC_NONE,
     ENC_WEP,
