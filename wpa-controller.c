@@ -10,6 +10,12 @@
 
 #define CONFIG_FILE "/wpa.conf"
 
+#define NOTE(format, arg...)            \
+    fprintf(stderr, "wpa-controller.c - %s():%d - " format, __func__, __LINE__, ## arg)
+#define ERROR(format, arg...)            \
+    fprintf(stderr, "wpa-controller.c - %s():%d - " format, __func__, __LINE__, ## arg)
+#define PERROR(format, arg...)            \
+    fprintf(stderr, "wpa-controller.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
 
 struct wpa_process {
     int pid;
@@ -72,28 +78,30 @@ int poll_wpa(struct wpa_process *process, int blocking) {
         bytes = read(fd, line, sizeof(line));
 
         /* This happens if wpa_supplicant quits */
-        if (!bytes)
+        if (!bytes) {
+            ERROR("wpa_supplicant closed");
             return -1;
+        }
 
         /* Indicates an error was encountered */
         if (bytes < 0) {
             if ((errno == EAGAIN) || (errno == EINTR))
                 return 0;
-            perror("Unable to read");
-            return -1;
+            PERROR("Unable to read");
+            return -2;
         }
 
         int i;
         for(i=0; line[i] && i<bytes; i++)
             if (line[i] == '\n' || line[i] == '\r')
                 line[i] = '\0';
-        fprintf(stderr, "Read %d bytes from %d.  Line: [%s]\n", bytes, fd, line);
+        NOTE("Read %d bytes from %d.  Line: [%s]\n", bytes, fd, line);
 
         if (startswith(line, "Associated with "))
             return 1;
 
         if (startswith(line, "No network configuration "))
-            return -1;
+            return -3;
 
         return 0;
     }
@@ -101,8 +109,8 @@ int poll_wpa(struct wpa_process *process, int blocking) {
         return 0;
     }
     else {
-        perror("Unable to select");
-        return -1;
+        PERROR("Unable to select");
+        return -4;
     }
 }
 
@@ -137,11 +145,11 @@ struct wpa_process *start_wpa(char *ssid, char *key, char *iface) {
 
         printf("Hi there!\n");
         execlp("wpa_supplicant", "-Dwext", "-i", iface, "-c" CONFIG_FILE, NULL);
-        perror("Unable to exec");
+        PERROR("Unable to exec");
         exit(1);
     }
     else if(process->pid < 0) {
-        perror("Unable to fork");
+        PERROR("Unable to fork");
         goto err;
     }
 
