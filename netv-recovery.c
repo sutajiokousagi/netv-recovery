@@ -34,6 +34,7 @@
 #define UNSUPPORTED_ENCRYPTION 8
 #define DOWNLOADING 9
 #define UNRECOVERABLE 10
+#define DONE 10
 
 #define ENC_OPEN 0
 #define ENC_WPA 1
@@ -223,6 +224,7 @@ do_download(struct recovery_data *data)
     }
 
     ret = system("busybox wget -O - http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz | zcat > /dev/mmcblk0p2");
+    move_to_scene(data, DONE);
 
     return 0;
 }
@@ -630,6 +632,34 @@ setup_scenes(struct recovery_data *data)
     data->scenes[9].elements[1].data = textbox2;
     data->scenes[9].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[9].num_elements = 2;
+
+
+
+    NOTE("Creating scene 11\n");
+    textbox = create_textbox();
+    textbox->x = 140;
+    textbox->y = 80;
+    textbox->w = 1000;
+    textbox->h = 128;
+    textbox->data = data;
+    set_label_textbox(textbox, "Status: ");
+    set_text_textbox(textbox, "Finished");
+
+
+    textbox2 = create_textbox();
+    textbox2->x = 140;
+    textbox2->y = 180;
+    textbox2->w = 1000;
+    textbox2->h = 128;
+    textbox2->data = data;
+    set_label_textbox(textbox2, "You can now restart the device");
+
+    data->scenes[10].id = DONE;
+    data->scenes[10].elements[0].data = textbox;
+    data->scenes[10].elements[0].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[10].elements[1].data = textbox2;
+    data->scenes[10].elements[1].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[10].num_elements = 2;
 
 
     return 0;
