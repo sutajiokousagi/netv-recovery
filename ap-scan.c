@@ -1,6 +1,6 @@
 #include "ap-scan.h"
 
-#ifdef linux
+#if defined(linux) && !defined(SIMULATION)
 /*
  *      Wireless Tools
  *
@@ -1448,6 +1448,7 @@ struct ap_description *ap_scan(char *dev) {
         dev = DEFAULT_DEVICE;
 
     free(found_aps);
+    found_aps = NULL;
     found_ap_count = 0;
 
     /* Create a channel to the NET kernel. */
