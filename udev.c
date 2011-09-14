@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <sys/mount.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 #ifdef DBG
 #define DEBUG_ADD(format, arg...)            \
@@ -24,6 +26,8 @@
     fprintf(stderr, "udev.c - %s():%d - " format, __func__, __LINE__, ## arg)
 #define NOTE(format, arg...)            \
     fprintf(stderr, "udev.c - %s():%d - " format, __func__, __LINE__, ## arg)
+#define PERROR(format, arg...)            \
+    fprintf(stderr, "udev.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
 
 #define COMPAT_FIRMWARE_STR "SUBSYSTEM=compat_firmware"
 #define FIRMWARE_STR "SUBSYSTEM=firmware"
@@ -98,7 +102,7 @@ int load_firmware(char *msg, int len) {
 	snprintf(str, sizeof(str), "/firmware/%s", firmware);
 	fw = open(str, O_RDONLY);
 	if (-1 == fw) {
-		perror("Unable to open firmware file");
+		PERROR("Unable to open firmware file");
 		return -3;
 	}
 
@@ -106,7 +110,7 @@ int load_firmware(char *msg, int len) {
 	snprintf(str, sizeof(str), "/sys%s/loading", devpath);
 	fd = open(str, O_WRONLY);
 	if (-1 == fd) {
-		perror("Unable to open loading file");
+		PERROR("Unable to open loading file");
 		return -4;
 	}
 	write(fd, "1\n", 2);
@@ -116,7 +120,7 @@ int load_firmware(char *msg, int len) {
 	snprintf(str, sizeof(str), "/sys%s/data", devpath);
 	fd = open(str, O_WRONLY);
 	if (-1 == fd) {
-		perror("Unable to open firmware output pipe");
+		PERROR("Unable to open firmware output pipe");
 		close(fw);
 		return -5;
 	}
@@ -126,7 +130,7 @@ int load_firmware(char *msg, int len) {
 		write(fd, str, len);
 
 	if (len < 0) {
-		perror("Error while reading firmware file");
+		PERROR("Error while reading firmware file");
 		close(fd);
 		close(fw);
 		return -6;
@@ -140,7 +144,7 @@ int load_firmware(char *msg, int len) {
 	snprintf(str, sizeof(str), "/sys%s/loading", devpath);
 	fd = open(str, O_WRONLY);
 	if (-1 == fd) {
-		perror("Unable to open loading file");
+		PERROR("Unable to open loading file");
 		return -4;
 	}
 	write(fd, "0\n", 2);
@@ -160,7 +164,7 @@ int udev_main(void) {
 
 	sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
 	if (sock == -1) {
-		perror("Unable to get socket");
+		PERROR("Unable to get socket");
 		return -1;
 	}
 	fcntl(sock, F_SETFD, FD_CLOEXEC);
@@ -169,7 +173,7 @@ int udev_main(void) {
 	snl.nl_groups = 1;
 
         if (bind(sock, (struct sockaddr *)&snl, sizeof(struct sockaddr_nl))<0){
-		perror("Unable to bind");
+		PERROR("Unable to bind");
 		return -2;
 	}
 
@@ -177,7 +181,7 @@ int udev_main(void) {
 
 	mkdir("/sys", 0777);
 	if (-1 == mount("none", "/sys", "sysfs", 0, NULL)) {
-		perror("Unable to mount sysfs");
+		PERROR("Unable to mount sysfs");
 		return -3;
 	}
 
@@ -190,11 +194,11 @@ int udev_main(void) {
 		int bytes;
 		bytes = recv(sock, data, sizeof(data), 0);
 		if (bytes < 0) {
-			perror("Unable to receive data");
+			PERROR("Unable to receive data");
 			exit(1);
 		}
 		if (bytes == 0) {
-			fprintf(stderr, "Kernel netlink closed\n");
+			ERROR("Kernel netlink closed\n");
 			exit(2);
 		}
 
