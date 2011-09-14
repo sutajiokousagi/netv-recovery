@@ -9,7 +9,13 @@
 #include <fcntl.h>
 
 #ifdef linux
+#include <sys/syscall.h>
 #include <linux/kd.h>
+# define init_module(mod, len, opts) syscall(__NR_init_module, mod, len, opts)
+# define delete_module(mod, flags) syscall(__NR_delete_module, mod, flags)
+#else
+# define init_module(mod, len, opts) 0
+# define delete_module(mod, flags) 0
 #endif
 
 #include "sdl-keyboard.h"
@@ -273,6 +279,26 @@ establish_connection(struct recovery_data *data)
     return 0;
 }
 
+static int my_init_module(char *path) {
+    int fd = open(path, O_RDONLY);
+    struct stat st;
+    if (!fd) {
+        perror("Unable to open module");
+        return -1;
+    }
+    fstat(fd, &st);
+
+    char dat[st.st_size];
+    if (read(fd, dat, sizeof(dat)) != sizeof(dat)) {
+        perror("Couldn't read");
+        close(fd);
+        return -2;
+    }
+    close(fd);
+
+    return init_module(dat, sizeof(dat), "");
+}
+
 static int
 run_ap_scan(struct recovery_data *data)
 {
@@ -280,15 +306,15 @@ run_ap_scan(struct recovery_data *data)
     struct textbox *textbox = data->scene->elements[1].data;
     int i;
 
-    system("busybox insmod /modules/compat_firmware_class.ko");
-    system("busybox insmod /modules/compat.ko");
-    system("busybox insmod /modules/rfkill_backport.ko");
-    system("busybox insmod /modules/cfg80211.ko");
-    system("busybox insmod /modules/ath.ko");
-    system("busybox insmod /modules/ath.ko");
-    system("busybox insmod /modules/ath9k_common.ko");
-    system("busybox insmod /modules/mac80211.ko");
-    system("busybox insmod /modules/ath9k_htc.ko");
+    my_init_module("/modules/compat_firmware_class.ko");
+    my_init_module("/modules/compat.ko");
+    my_init_module("/modules/rfkill_backport.ko");
+    my_init_module("/modules/cfg80211.ko");
+    my_init_module("/modules/ath.ko");
+    my_init_module("/modules/ath.ko");
+    my_init_module("/modules/ath9k_common.ko");
+    my_init_module("/modules/mac80211.ko");
+    my_init_module("/modules/ath9k_htc.ko");
     clear_picker(picker);
     set_label_textbox(textbox, "Scanning for networks...");
     redraw_scene(data);
