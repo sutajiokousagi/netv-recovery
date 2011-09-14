@@ -534,16 +534,10 @@ int main(int argc, char **argv) {
     signal(SIGHUP, sig_handle);
     signal(SIGALRM, sig_handle);
 #ifdef linux
+    mkdir("/dev/input", 0777);
+    mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64));
+    mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65));
     alarm(1);
-    unlink("/dev/tty0");
-    unlink("/dev/tty1");
-    unlink("/dev/tty2");
-    unlink("/dev/tty3");
-    unlink("/dev/tty4");
-    unlink("/dev/tty5");
-    unlink("/dev/tty6");
-    unlink("/dev/tty7");
-    unlink("/dev/tty8");
 #endif
 
     bzero(&e, sizeof(e));
