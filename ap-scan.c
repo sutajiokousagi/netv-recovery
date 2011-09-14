@@ -1499,13 +1499,17 @@ static struct ap_description aps[4];
 
 struct ap_description *ap_scan(char *dev) {
     sleep(1);
-    strncpy(aps[0].ssid, "Test AP 1", sizeof(aps[0].ssid));
-    strncpy(aps[1].ssid, "Test AP 2", sizeof(aps[1].ssid));
-    strncpy(aps[2].ssid, "Test AP 3", sizeof(aps[2].ssid));
+    strncpy(aps[0].ssid, "Test AP 1 (WPA)", sizeof(aps[0].ssid));
+    strncpy(aps[1].ssid, "Test AP 2 (WEP)", sizeof(aps[1].ssid));
+    strncpy(aps[2].ssid, "Test AP 3 (Open)", sizeof(aps[2].ssid));
     aps[0].populated = 1;
     aps[1].populated = 1;
     aps[2].populated = 1;
     aps[3].populated = 0;
+
+    aps[0].auth = AUTH_WPAPSK;
+    aps[1].auth = AUTH_WEPAUTO;
+    aps[3].auth = AUTH_OPEN;
 
     return aps;
 }
