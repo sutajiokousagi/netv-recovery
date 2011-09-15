@@ -477,7 +477,28 @@ static inline int set_addr(struct client_config_t *cfg,
 		return -2;
 	}
 
-	ifr.ifr_flags = IFF_UP | IFF_RUNNING;
+	NOTE("Set IP address to %u.%u.%u.%u",
+		((char *)&(packet->yiaddr))[0],
+		((char *)&(packet->yiaddr))[1],
+		((char *)&(packet->yiaddr))[2],
+		((char *)&(packet->yiaddr))[3]);
+
+
+	bzero(&ifr, sizeof(ifr));
+	strncpy(ifr.ifr_name, cfg->interface, IFNAMSIZ);
+	if (-1 == ioctl(sockfd, SIOCGIFFLAGS, &ifr)) {
+		PERROR("Unable to make request for network flags");
+		close(sockfd);
+		return -3;
+	}
+	ifr.ifr_flags |= IFF_UP|IFF_BROADCAST|IFF_RUNNING|IFF_MULTICAST;
+	if (-1 == ioctl(sockfd, SIOCSIFFLAGS, &ifr)) {
+		PERROR("Unable to make request to set network flags");
+		close(sockfd);
+		return -4;
+	}
+
+	NOTE("Brought interface up");
 
 	close(sockfd);
 	
