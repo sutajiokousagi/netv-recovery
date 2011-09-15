@@ -415,6 +415,13 @@ static inline void fill_default(struct sockaddr_in *in) {
 	return;
 }
 
+static inline void fill_addr(struct sockaddr_in *in, uint32_t addr) {
+	in->sin_family = AF_INET;
+	in->sin_port = 0;
+	in->sin_addr.s_addr = addr;
+}
+
+#define mask_in_addr(x) (((struct sockaddr_in *)&((x).rt_genmask))->sin_addr.s_addr)
 static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *packet, const char *name)
 {
 	if (!strcmp(name, "bound")) {
@@ -434,8 +441,10 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 
 		rt.rt_dev    = (char *)cfg->interface;
 		rt.rt_metric = 1;
-		fill_default((struct sockaddr_in *)&rt.rt_gateway);
+		fill_default((struct sockaddr_in *)&rt.rt_dst);
+		fill_addr((struct sockaddr_in *)&rt.rt_gateway, packet->gateway_nip);
 		rt.rt_flags  = (RTF_UP | RTF_HOST | RTF_GATEWAY);
+		mask_in_addr(rt) = 0xffffffff;
 
 		if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
 			PERROR("Unable to add route");
