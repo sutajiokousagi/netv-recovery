@@ -250,14 +250,14 @@ do_download(struct recovery_data *data)
     redraw_scene(data);
 
     ret = prepare_partitions();
-    if (ret && ret != -6) {
+    if (ret == -6) {
+        NOTE("Simulation mode detected\n");
+    }
+    else if (ret) {
         ERROR("Unable to prepare disk: %d\n", ret);
         move_to_scene(data, UNRECOVERABLE);
     }
-    else if (ret) {
-        NOTE("Simulation mode detected");
-        return 0;
-    }
+
 
     if (ret == -6)
         out = open("output.bin", O_WRONLY | O_CREAT, 0777);
