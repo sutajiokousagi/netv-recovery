@@ -51,7 +51,8 @@
 #define ENC_OPEN 0
 #define ENC_WPA 1
 
-#define IMAGE_URL "http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz"
+//#define IMAGE_URL "http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz"
+#define IMAGE_URL "http://175.41.134.235/build/silvermoon-netv/LATEST/disk-image.gz"
 #define OTHER_NETWORK_STRING "[Other Network]"
 struct recovery_data;
 
