@@ -25,6 +25,7 @@ int my_ifup(char *ifname) {
 		return -1;
 	}
 
+	bzero(&ifr, sizeof(ifr));
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name)-1);
 	if (-1 == ioctl(sockfd, SIOCGIFFLAGS, &ifr)) {
 		perror("Unable to make request for network flags");
