@@ -409,6 +409,7 @@ static int udhcp_listen_socket(/*uint32_t ip,*/ int port, const char *inf);
 
 
 static inline void fill_default(struct sockaddr_in *in) {
+	bzero(in, sizeof(*in));
 	in->sin_family = AF_INET;
 	in->sin_port   = 0;
 	in->sin_addr.s_addr = INADDR_ANY;
@@ -416,9 +417,11 @@ static inline void fill_default(struct sockaddr_in *in) {
 }
 
 static inline void fill_addr(struct sockaddr_in *in, uint32_t addr) {
+	bzero(in, sizeof(*in));
 	in->sin_family = AF_INET;
 	in->sin_port = 0;
-	in->sin_addr.s_addr = addr;
+	in->sin_addr.s_addr = htonl(addr);
+	NOTE("Setting gateway to %d\n", in->sin_addr.s_addr);
 }
 
 #define mask_in_addr(x) (((struct sockaddr_in *)&((x).rt_genmask))->sin_addr.s_addr)
@@ -427,7 +430,7 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 	if (!strcmp(name, "bound")) {
 		int fd;
 		struct rtentry rt;
-		NOTE("Running internal script 'bound'\n");
+		NOTE("Running internal script 'bound'");
 
 		fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 		if (fd == -1) {
@@ -440,10 +443,10 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 /* /sbin/route add default gw $i dev $interface metric $((metric++)) */
 
 		rt.rt_dev    = (char *)cfg->interface;
-		rt.rt_metric = 1;
+		rt.rt_metric = 2;
 		fill_default((struct sockaddr_in *)&rt.rt_dst);
 		fill_addr((struct sockaddr_in *)&rt.rt_gateway, packet->gateway_nip);
-		rt.rt_flags  = (RTF_UP | RTF_HOST | RTF_GATEWAY);
+		rt.rt_flags  = (RTF_UP | RTF_GATEWAY);
 		mask_in_addr(rt) = 0xffffffff;
 
 		if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
@@ -454,8 +457,8 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 
 		close(fd);
 	}
-		
-	NOTE("Need to run script %s\n", name);
+	else
+		NOTE("Need to handle script %s", name);
 }
 
 
