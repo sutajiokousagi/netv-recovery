@@ -420,7 +420,7 @@ static inline void fill_addr(struct sockaddr_in *in, uint32_t addr) {
 	bzero(in, sizeof(*in));
 	in->sin_family = AF_INET;
 	in->sin_port = 0;
-	in->sin_addr.s_addr = htonl(addr);
+	in->sin_addr.s_addr = ntohl(addr);
 	NOTE("Setting gateway to %d\n", in->sin_addr.s_addr);
 }
 
