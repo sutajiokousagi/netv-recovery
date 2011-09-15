@@ -208,46 +208,46 @@ typedef unsigned smalluint;
  */
 #define DHCP_PADDING            0x00
 #define DHCP_SUBNET             0x01
-//#define DHCP_TIME_OFFSET      0x02 /* (localtime - UTC_time) in seconds. signed */
-//#define DHCP_ROUTER           0x03
-//#define DHCP_TIME_SERVER      0x04 /* RFC 868 time server (32-bit, 0 = 1.1.1900) */
-//#define DHCP_NAME_SERVER      0x05 /* IEN 116 _really_ ancient kind of NS */
-//#define DHCP_DNS_SERVER       0x06
-//#define DHCP_LOG_SERVER       0x07 /* port 704 UDP log (not syslog)
-//#define DHCP_COOKIE_SERVER    0x08 /* "quote of the day" server */
-//#define DHCP_LPR_SERVER       0x09
+#define DHCP_TIME_OFFSET      0x02 /* (localtime - UTC_time) in seconds. signed */
+#define DHCP_ROUTER           0x03
+#define DHCP_TIME_SERVER      0x04 /* RFC 868 time server (32-bit, 0 = 1.1.1900) */
+#define DHCP_NAME_SERVER      0x05 /* IEN 116 _really_ ancient kind of NS */
+#define DHCP_DNS_SERVER       0x06
+#define DHCP_LOG_SERVER       0x07 /* port 704 UDP log (not syslog) */
+#define DHCP_COOKIE_SERVER    0x08 /* "quote of the day" server */
+#define DHCP_LPR_SERVER       0x09
 #define DHCP_HOST_NAME          0x0c /* either client informs server or server gives name to client */
-//#define DHCP_BOOT_SIZE        0x0d
-//#define DHCP_DOMAIN_NAME      0x0f /* server gives domain suffix */
-//#define DHCP_SWAP_SERVER      0x10
-//#define DHCP_ROOT_PATH        0x11
-//#define DHCP_IP_TTL           0x17
-//#define DHCP_MTU              0x1a
-//#define DHCP_BROADCAST        0x1c
-//#define DHCP_ROUTES           0x21
-//#define DHCP_NIS_DOMAIN       0x28
-//#define DHCP_NIS_SERVER       0x29
-//#define DHCP_NTP_SERVER       0x2a
-//#define DHCP_WINS_SERVER      0x2c
+#define DHCP_BOOT_SIZE        0x0d
+#define DHCP_DOMAIN_NAME      0x0f /* server gives domain suffix */
+#define DHCP_SWAP_SERVER      0x10
+#define DHCP_ROOT_PATH        0x11
+#define DHCP_IP_TTL           0x17
+#define DHCP_MTU              0x1a
+#define DHCP_BROADCAST        0x1c
+#define DHCP_ROUTES           0x21
+#define DHCP_NIS_DOMAIN       0x28
+#define DHCP_NIS_SERVER       0x29
+#define DHCP_NTP_SERVER       0x2a
+#define DHCP_WINS_SERVER      0x2c
 #define DHCP_REQUESTED_IP       0x32 /* sent by client if specific IP is wanted */
 #define DHCP_LEASE_TIME         0x33
 #define DHCP_OPTION_OVERLOAD    0x34
 #define DHCP_MESSAGE_TYPE       0x35
 #define DHCP_SERVER_ID          0x36 /* by default server's IP */
 #define DHCP_PARAM_REQ          0x37 /* list of options client wants */
-//#define DHCP_ERR_MESSAGE      0x38 /* error message when sending NAK etc */
+#define DHCP_ERR_MESSAGE      0x38 /* error message when sending NAK etc */
 #define DHCP_MAX_SIZE           0x39
 #define DHCP_VENDOR             0x3c /* client's vendor (a string) */
 #define DHCP_CLIENT_ID          0x3d /* by default client's MAC addr, but may be arbitrarily long */
-//#define DHCP_TFTP_SERVER_NAME 0x42 /* same as 'sname' field */
-//#define DHCP_BOOT_FILE        0x43 /* same as 'file' field */
-//#define DHCP_USER_CLASS       0x4d /* RFC 3004. set of LASCII strings. "I am a printer" etc */
+#define DHCP_TFTP_SERVER_NAME 0x42 /* same as 'sname' field */
+#define DHCP_BOOT_FILE        0x43 /* same as 'file' field */
+#define DHCP_USER_CLASS       0x4d /* RFC 3004. set of LASCII strings. "I am a printer" etc */
 #define DHCP_FQDN               0x51 /* client asks to update DNS to map its FQDN to its new IP */
-//#define DHCP_DOMAIN_SEARCH    0x77 /* RFC 3397. set of ASCIZ string, DNS-style compressed */
-//#define DHCP_SIP_SERVERS      0x78 /* RFC 3361. flag byte, then: 0: domain names, 1: IP addrs */
-//#define DHCP_STATIC_ROUTES    0x79 /* RFC 3442. (mask,ip,router) tuples */
-//#define DHCP_MS_STATIC_ROUTES 0xf9 /* Microsoft's pre-RFC 3442 code for 0x79? */
-//#define DHCP_WPAD             0xfc /* MSIE's Web Proxy Autodiscovery Protocol */
+#define DHCP_DOMAIN_SEARCH    0x77 /* RFC 3397. set of ASCIZ string, DNS-style compressed */
+#define DHCP_SIP_SERVERS      0x78 /* RFC 3361. flag byte, then: 0: domain names, 1: IP addrs */
+#define DHCP_STATIC_ROUTES    0x79 /* RFC 3442. (mask,ip,router) tuples */
+#define DHCP_MS_STATIC_ROUTES 0xf9 /* Microsoft's pre-RFC 3442 code for 0x79? */
+#define DHCP_WPAD             0xfc /* MSIE's Web Proxy Autodiscovery Protocol */
 #define DHCP_END                0xff
 
 /* Offsets in option byte sequence */
@@ -403,6 +403,7 @@ static int udhcp_send_kernel_packet(struct dhcp_packet *dhcp_pkt,
 		uint32_t dest_nip, int dest_port);
 static uint16_t udhcp_checksum(void *addr, int count);
 static int udhcp_listen_socket(/*uint32_t ip,*/ int port, const char *inf);
+static uint8_t* udhcp_get_option(struct dhcp_packet *packet, int code) ;
 
 
 /*** Script execution code ***/
@@ -416,12 +417,27 @@ static inline void fill_default(struct sockaddr_in *in) {
 	return;
 }
 
-static inline void fill_addr(struct sockaddr_in *in, uint32_t addr) {
+static inline void fill_addr(struct sockaddr_in *in, void *addr) {
 	bzero(in, sizeof(*in));
 	in->sin_family = AF_INET;
 	in->sin_port = 0;
-	in->sin_addr.s_addr = ntohl(addr);
-	NOTE("Setting gateway to %d\n", in->sin_addr.s_addr);
+	memcpy(&in->sin_addr.s_addr, addr, sizeof(in->sin_addr.s_addr));
+	NOTE("Setting gateway to %d", in->sin_addr.s_addr);
+}
+
+static inline void populate_resolv_conf(FILE *resolv, void *data) {
+	int addr_count = 0;
+	while (addr_count < 5 && ((char *)data)[0] != '\r') {
+		addr_count++;
+		const uint8_t *ip = data;
+		fprintf(stderr, "nameserver %u.%u.%u.%u\n",
+			ip[0], ip[1], ip[2], ip[3]);
+		fprintf(resolv, "nameserver %u.%u.%u.%u\n",
+			ip[0], ip[1], ip[2], ip[3]);
+		data += 4;
+		if ( ((char *)data)[0] == '\f')
+			data++;
+	}
 }
 
 #define mask_in_addr(x) (((struct sockaddr_in *)&((x).rt_genmask))->sin_addr.s_addr)
@@ -432,7 +448,7 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 		struct rtentry rt;
 		NOTE("Running internal script 'bound'");
 
-		fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+		fd = socket(AF_INET, SOCK_DGRAM, 0);
 		if (fd == -1) {
 			PERROR("Unable to communicate with kernel");
 			return;
@@ -445,17 +461,27 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 		rt.rt_dev    = (char *)cfg->interface;
 		rt.rt_metric = 2;
 		fill_default((struct sockaddr_in *)&rt.rt_dst);
-		fill_addr((struct sockaddr_in *)&rt.rt_gateway, packet->gateway_nip);
+		fill_addr((struct sockaddr_in *)&rt.rt_gateway, udhcp_get_option(packet, DHCP_ROUTER));
 		rt.rt_flags  = (RTF_UP | RTF_GATEWAY);
-		mask_in_addr(rt) = 0xffffffff;
 
+		/*
 		if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
 			PERROR("Unable to add route");
 			close(fd);
 			return;
 		}
+		*/
 
 		close(fd);
+
+		FILE *resolv = fopen("/etc/resolv.conf", "w");
+		if (!resolv) {
+			PERROR("Unable to create /etc/resolv.conf");
+			return;
+		}
+		populate_resolv_conf(resolv,
+				     udhcp_get_option(packet, DHCP_DNS_SERVER));
+		fclose(resolv);
 	}
 	else
 		NOTE("Need to handle script %s", name);
@@ -1194,29 +1220,12 @@ static int udhcp_recv_kernel_packet(struct dhcp_packet *packet, int fd)
 	if (packet->op == BOOTREQUEST) {
 		vendor = udhcp_get_option(packet, DHCP_VENDOR);
 		if (vendor) {
-#if 0
-			static const char broken_vendors[][8] = {
-				"MSFT 98",
-				""
-			};
-			int i;
-			for (i = 0; broken_vendors[i][0]; i++) {
-				if (vendor[OPT_LEN - OPT_DATA] == (uint8_t)strlen(broken_vendors[i])
-				 && strncmp((char*)vendor, broken_vendors[i], vendor[OPT_LEN - OPT_DATA]) == 0
-				) {
-					LOG1("Broken client (%s), forcing broadcast replies",
-						broken_vendors[i]);
-					packet->flags |= htons(BROADCAST_FLAG);
-				}
-			}
-#else
 			if (vendor[OPT_LEN - OPT_DATA] == (uint8_t)(sizeof("MSFT 98")-1)
 			 && memcmp(vendor, "MSFT 98", sizeof("MSFT 98")-1) == 0
 			) {
 				LOG1("Broken client (%s), forcing broadcast replies", "MSFT 98");
 				packet->flags |= htons(BROADCAST_FLAG);
 			}
-#endif
 		}
 	}
 
