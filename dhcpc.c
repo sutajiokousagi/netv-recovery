@@ -419,9 +419,6 @@ static inline void fill_default(struct sockaddr_in *in) {
 
 static inline void fill_addr(struct sockaddr_in *in, void *addr) {
 	bzero(in, sizeof(*in));
-	in->sin_family = AF_INET;
-	in->sin_port = 0;
-	memcpy(&in->sin_addr.s_addr, addr, sizeof(in->sin_addr.s_addr));
 	NOTE("Setting gateway to %d", in->sin_addr.s_addr);
 }
 
@@ -434,7 +431,7 @@ static inline void populate_resolv_conf(FILE *resolv, void *data) {
 //	while (addr_count < 5 && ((char *)data)[0] != '\r') {
 		addr_count++;
 		const uint8_t *ip = data;
-		fprintf(stderr, "nameserver %u.%u.%u.%u\n",
+		NOTE("Adding nameserver %u.%u.%u.%u",
 			ip[0], ip[1], ip[2], ip[3]);
 		fprintf(resolv, "nameserver %u.%u.%u.%u\n",
 			ip[0], ip[1], ip[2], ip[3]);
@@ -511,6 +508,8 @@ static inline int set_route(struct client_config_t *cfg,
 {
 	int fd;
 	struct rtentry rt;
+	struct sockaddr_in *addr;
+
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd == -1) {
@@ -520,17 +519,35 @@ static inline int set_route(struct client_config_t *cfg,
 
 	bzero(&rt, sizeof(rt));
 
-	rt.rt_dev    = (char *)cfg->interface;
-	rt.rt_metric = 2;
-	fill_default((struct sockaddr_in *)&rt.rt_dst);
-	fill_addr((struct sockaddr_in *)&rt.rt_gateway, udhcp_get_option(packet, DHCP_ROUTER));
+	rt.rt_metric = 0;
 	rt.rt_flags  = (RTF_UP | RTF_GATEWAY);
+
+	addr = (struct sockaddr_in*) &rt.rt_gateway;
+	addr->sin_family = AF_INET;
+	memcpy(&addr->sin_addr.s_addr,
+		udhcp_get_option(packet, DHCP_ROUTER),
+		sizeof(addr->sin_addr.s_addr));
+
+	addr = (struct sockaddr_in*) &rt.rt_dst;
+	addr->sin_family = AF_INET;
+	addr->sin_addr.s_addr = inet_addr("0.0.0.0");
+
+	addr = (struct sockaddr_in*) &rt.rt_genmask;
+	addr->sin_family = AF_INET;
+	addr->sin_addr.s_addr = inet_addr("0.0.0.0");
 
 	if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
 		PERROR("Unable to add route");
 		close(fd);
 		return -1;
 	}
+
+	addr = (struct sockaddr_in*) &rt.rt_gateway;
+	NOTE("Set route to %u.%u.%u.%u",
+		((char *)&(addr->sin_addr))[0],
+		((char *)&(addr->sin_addr))[1],
+		((char *)&(addr->sin_addr))[2],
+		((char *)&(addr->sin_addr))[3]);
 
 	close(fd);
 	return 0;
@@ -557,13 +574,13 @@ static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *pa
 	if (!strcmp(name, "bound")) {
 		NOTE("Running internal script 'bound'");
 
-		if (!set_addr(cfg, packet))
+		if (set_addr(cfg, packet))
 			return;
 
-		if (!set_route(cfg, packet))
+		if (set_route(cfg, packet))
 			return;
 
-		if (!set_resolv_conf(cfg, packet))
+		if (set_resolv_conf(cfg, packet))
 			return;
 	}
 	else
