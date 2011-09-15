@@ -216,8 +216,7 @@ static inline int xconnect(int s, const struct sockaddr *s_addr, socklen_t addrl
     if (connect(s, s_addr, addrlen) < 0) {
         close(s);
         if (s_addr->sa_family == AF_INET)
-            ERROR("%s (%s)",
-				"can't connect to remote host",
+            ERROR("%s (%s)", "can't connect to remote host",
                 inet_ntoa(((struct sockaddr_in *)s_addr)->sin_addr));
         ERROR("can't connect to remote host");
 		return -1;
@@ -309,7 +308,7 @@ static len_and_sockaddr* str2sockaddr(
 
  ret:
         freeaddrinfo(result);
-        ERROR("Returning %p\n", r);
+        ERROR("Returning %p", r);
         return r;
 }
 
@@ -639,8 +638,10 @@ FILE *do_wget(char *url, int *total)
 
 	/* Open socket to http server */
 	sfp = open_socket(lsa);
-	if (!sfp)
+	if (!sfp) {
+		ERROR("Couldn't connect to %s:%d", server.host, server.port);
 		return NULL;
+	}
 
 	/* Send HTTP request */
 	fprintf(sfp, "GET /%s HTTP/1.1\r\n", target.path);
@@ -774,7 +775,6 @@ However, in real world it was observed that some web servers
 
 	ndelay_off(fileno(sfp));
 	clearerr(sfp);
-	ERROR("Chunked? %d", state.chunked);
 	if (total)
 		*total = state.total_len;
 	return sfp;
