@@ -50,6 +50,7 @@
 #include <linux/if.h>
 #include <linux/udp.h>
 #include <linux/sockios.h>
+#include <linux/route.h>
 
 #ifndef offsetof
 # define offsetof(T,F) ((unsigned int)((char *)&((T *)0L)->F - (char *)0L))
@@ -66,6 +67,9 @@
 
 #define NOTE(format, arg...)            \
     fprintf(stderr, "dhcpc.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
+#define PERROR(format, arg...)            \
+    fprintf(stderr, "dhcpc.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
+
 
 #define ERROR(format, arg...)            \
     fprintf(stderr, "dhcpc.c - %s():%d - " format, __func__, __LINE__, ## arg)
@@ -162,6 +166,8 @@ struct dhcp_packet {
         uint32_t cookie;      /* fixed first four option bytes (99,130,83,99 dec) */
         uint8_t options[DHCP_OPTIONS_BUFSIZE + 80];
 } __attribute__ ((packed));
+
+
 
 struct client_config_t {
         uint8_t client_mac[6];          /* Our mac address */
@@ -402,10 +408,44 @@ static int udhcp_listen_socket(/*uint32_t ip,*/ int port, const char *inf);
 /*** Script execution code ***/
 
 
+static inline void fill_default(struct sockaddr_in *in) {
+	in->sin_family = AF_INET;
+	in->sin_port   = 0;
+	in->sin_addr.s_addr = INADDR_ANY;
+	return;
+}
 
-/* Call a script with a par file and env vars */
-static void udhcp_run_script(struct dhcp_packet *packet, const char *name)
+static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *packet, const char *name)
 {
+	if (!strcmp(name, "bound")) {
+		int fd;
+		struct rtentry rt;
+		NOTE("Running internal script 'bound'\n");
+
+		fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+		if (fd == -1) {
+			PERROR("Unable to communicate with kernel");
+			return;
+		}
+
+		bzero(&rt, sizeof(rt));
+
+/* /sbin/route add default gw $i dev $interface metric $((metric++)) */
+
+		rt.rt_dev    = (char *)cfg->interface;
+		rt.rt_metric = 1;
+		fill_default((struct sockaddr_in *)&rt.rt_gateway);
+		rt.rt_flags  = (RTF_UP | RTF_HOST | RTF_GATEWAY);
+
+		if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
+			PERROR("Unable to add route");
+			close(fd);
+			return;
+		}
+
+		close(fd);
+	}
+		
 	NOTE("Need to run script %s\n", name);
 }
 
@@ -889,7 +929,7 @@ static void perform_renew(struct client_config_t *cfg)
 		state = RENEW_REQUESTED;
 		break;
 	case RENEW_REQUESTED: /* impatient are we? fine, square 1 */
-		udhcp_run_script(NULL, "deconfig");
+		udhcp_run_script(cfg, NULL, "deconfig");
 	case REQUESTING:
 	case RELEASED:
 		change_listen_mode(cfg, LISTEN_RAW);
@@ -913,7 +953,7 @@ static void perform_release(struct client_config_t *cfg, uint32_t requested_ip, 
 		NOTE("Unicasting a release of %s to %s",
 				inet_ntoa(temp_addr), buffer);
 		send_release(cfg, server_addr, requested_ip); /* unicast */
-		udhcp_run_script(NULL, "deconfig");
+		udhcp_run_script(cfg, NULL, "deconfig");
 	}
 	NOTE("Entering released state");
 
@@ -978,7 +1018,7 @@ static int udhcp_read_interface(const char *interface, int *ifindex, uint32_t *n
 	strncpy_IFNAMSIZ(ifr.ifr_name, interface);
 	if (nip) {
 		if (-1 == ioctl(fd, SIOCGIFADDR, &ifr)) {
-			perror("is interface up and configured?");
+			PERROR("is interface up and configured?");
 			close(fd);
 			return -1;
 		}
@@ -1416,7 +1456,7 @@ int udhcpc_main(char *interface)
 	srand(monotonic_us());
 
 	state = INIT_SELECTING;
-	udhcp_run_script(NULL, "deconfig");
+	udhcp_run_script(&client_config, NULL, "deconfig");
 	change_listen_mode(&client_config, LISTEN_RAW);
 	packet_num = 0;
 	timeout = 0;
@@ -1492,7 +1532,7 @@ int udhcpc_main(char *interface)
 					continue;
 				}
  leasefail:
-				udhcp_run_script(NULL, "leasefail");
+				udhcp_run_script(&client_config, NULL, "leasefail");
 				NOTE("No lease, failing");
 				retval = -1;
 				goto ret;
@@ -1551,7 +1591,7 @@ int udhcpc_main(char *interface)
 				}
 				/* Timed out, enter init state */
 				NOTE("Lease lost, entering init state");
-				udhcp_run_script(NULL, "deconfig");
+				udhcp_run_script(&client_config, NULL, "deconfig");
 				state = INIT_SELECTING;
 				/*timeout = 0; - already is */
 				packet_num = 0;
@@ -1683,7 +1723,7 @@ int udhcpc_main(char *interface)
 						inet_ntoa(temp_addr), (unsigned)lease_seconds);
 				}
 				requested_ip = packet.yiaddr;
-				udhcp_run_script(&packet, state == REQUESTING ? "bound" : "renew");
+				udhcp_run_script(&client_config, &packet, state == REQUESTING ? "bound" : "renew");
 
 				state = BOUND;
 				change_listen_mode(&client_config, LISTEN_NONE);
@@ -1696,9 +1736,9 @@ int udhcpc_main(char *interface)
 			if (*message == DHCPNAK) {
 				/* return to init state */
 				NOTE("Received DHCP NAK");
-				udhcp_run_script(&packet, "nak");
+				udhcp_run_script(&client_config, &packet, "nak");
 				if (state != REQUESTING)
-					udhcp_run_script(NULL, "deconfig");
+					udhcp_run_script(&client_config, NULL, "deconfig");
 				change_listen_mode(&client_config, LISTEN_RAW);
 				sleep(3); /* avoid excessive network traffic */
 				state = INIT_SELECTING;
