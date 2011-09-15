@@ -186,6 +186,12 @@ int udev_main(void) {
 		return -3;
 	}
 
+	mkdir("/proc", 0777);
+	if (-1 == mount("none", "/proc", "procfs", 0, NULL)) {
+		PERROR("Unable to mount procfs");
+		return -3;
+	}
+
 	if ((pid=fork()))
 		return pid;
 
