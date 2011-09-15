@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <zlib.h>
 #include <errno.h>
+#include <arpa/inet.h>
 
 #ifdef linux
 #include <sys/syscall.h>
@@ -293,6 +294,61 @@ wait_a_sec(struct recovery_data *data)
     return 0;
 }
 
+static char *print_addr(uint32_t a) {
+	static char bfr[32];
+	snprintf(bfr, sizeof(bfr)-1, "%u.%u.%u.%u",
+		((char *)&(a))[0],
+		((char *)&(a))[1],
+		((char *)&(a))[2],
+		((char *)&(a))[3]);
+	return bfr;
+}
+
+static int print_route() {
+	int netstatfmt = 0;
+        char devname[64], flags[16], sdest[32], sgw[32];
+        unsigned long d, g, m;
+        int flgs, ref, use, metric, mtu, win, ir;
+
+        FILE *fp = fopen("/proc/net/route", "r");
+
+        printf("Kernel IP routing table\n"
+               "Destination     Gateway         Genmask         Flags %s Iface\n",
+                        netstatfmt ? "  MSS Window  irtt" : "Metric Ref    Use");
+
+        if (fscanf(fp, "%*[^\n]\n") < 0) { /* Skip the first line. */
+                goto ERROR;                /* Empty or missing line, or read error. */
+        }
+        while (1) {
+                int r;
+                r = fscanf(fp, "%63s%lx%lx%X%d%d%d%lx%d%d%d\n",
+                                   devname, &d, &g, &flgs, &ref, &use, &metric, &m,
+                                   &mtu, &win, &ir);
+                if (r != 11) {
+                        if ((r < 0) && feof(fp)) { /* EOF with no (nonspace) chars read. */
+                                break;
+                        }
+ ERROR:
+                        PERROR("fscanf");
+			return 1;
+                }
+
+
+                strncpy(sdest, print_addr(d), sizeof(sdest)-1);
+                strncpy(sgw, print_addr(g), sizeof(sgw)-1);
+                /* "%15.15s" truncates hostnames, do we really want that? */
+                printf("%-15.15s %-15.15s %-16s%-6s", sdest, sgw, print_addr(m), flags);
+                if (netstatfmt) {
+                        printf("%5d %-5d %6d %s\n", mtu, win, ir, devname);
+                } else {
+                        printf("%-6d %-2d %7d %s\n", metric, ref, use, devname);
+                }
+        }
+	fclose(fp);
+	return 0;
+}
+
+
 static int
 establish_connection(struct recovery_data *data)
 {
@@ -326,6 +382,7 @@ establish_connection(struct recovery_data *data)
             move_to_scene(data, CONNECTION_ERROR);
         }
         NOTE("Connected!\n");
+        print_route();
         move_to_scene(data, CONNECTED);
     }
 
