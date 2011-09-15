@@ -427,7 +427,8 @@ static inline void fill_addr(struct sockaddr_in *in, void *addr) {
 
 static inline void populate_resolv_conf(FILE *resolv, void *data) {
 	int addr_count = 0;
-	while (addr_count < 5 && ((char *)data)[0] != '\r') {
+/* Only support one nameserver for now */
+//	while (addr_count < 5 && ((char *)data)[0] != '\r') {
 		addr_count++;
 		const uint8_t *ip = data;
 		fprintf(stderr, "nameserver %u.%u.%u.%u\n",
@@ -435,9 +436,9 @@ static inline void populate_resolv_conf(FILE *resolv, void *data) {
 		fprintf(resolv, "nameserver %u.%u.%u.%u\n",
 			ip[0], ip[1], ip[2], ip[3]);
 		data += 4;
-		if ( ((char *)data)[0] == '\f')
-			data++;
-	}
+//		if ( ((char *)data)[0] == '\f')
+//			data++;
+//	}
 }
 
 #define mask_in_addr(x) (((struct sockaddr_in *)&((x).rt_genmask))->sin_addr.s_addr)
