@@ -425,6 +425,9 @@ static inline void fill_addr(struct sockaddr_in *in, void *addr) {
 	NOTE("Setting gateway to %d", in->sin_addr.s_addr);
 }
 
+
+
+#define mask_in_addr(x) (((struct sockaddr_in *)&((x).rt_genmask))->sin_addr.s_addr)
 static inline void populate_resolv_conf(FILE *resolv, void *data) {
 	int addr_count = 0;
 /* Only support one nameserver for now */
@@ -441,48 +444,106 @@ static inline void populate_resolv_conf(FILE *resolv, void *data) {
 //	}
 }
 
-#define mask_in_addr(x) (((struct sockaddr_in *)&((x).rt_genmask))->sin_addr.s_addr)
+
+//sbin/ifconfig $interface $ip $BROADCAST $NETMASK
+static inline int set_addr(struct client_config_t *cfg,
+			   struct dhcp_packet *packet)
+{
+	struct ifreq ifr;
+	struct sockaddr_in *addr;
+	int sockfd;
+
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (-1 == sockfd) {
+		perror("Unable to create socket");
+		return -1;
+	}
+
+	bzero(&ifr, sizeof(ifr));
+	addr = (struct sockaddr_in *) &(ifr.ifr_addr);
+	bzero(addr, sizeof(*addr));
+
+	strncpy(ifr.ifr_name, cfg->interface, IFNAMSIZ);
+	addr->sin_family = AF_INET;
+	memcpy(&addr->sin_addr, &packet->yiaddr, sizeof(packet->yiaddr));
+
+	if (-1 == ioctl(sockfd, SIOCSIFADDR, &ifr)) {
+		PERROR("Unable to set IP address to %u.%u.%u.%u",
+			((char *)&(packet->yiaddr))[0],
+			((char *)&(packet->yiaddr))[1],
+			((char *)&(packet->yiaddr))[2],
+			((char *)&(packet->yiaddr))[3]);
+		close(sockfd);
+		return -2;
+	}
+
+	ifr.ifr_flags = IFF_UP | IFF_RUNNING;
+
+	close(sockfd);
+	
+	return 0;
+}
+
+
+static inline int set_route(struct client_config_t *cfg,
+			    struct dhcp_packet *packet)
+{
+	int fd;
+	struct rtentry rt;
+
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd == -1) {
+		PERROR("Unable to communicate with kernel");
+		return -1;
+	}
+
+	bzero(&rt, sizeof(rt));
+
+	rt.rt_dev    = (char *)cfg->interface;
+	rt.rt_metric = 2;
+	fill_default((struct sockaddr_in *)&rt.rt_dst);
+	fill_addr((struct sockaddr_in *)&rt.rt_gateway, udhcp_get_option(packet, DHCP_ROUTER));
+	rt.rt_flags  = (RTF_UP | RTF_GATEWAY);
+
+	if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
+		PERROR("Unable to add route");
+		close(fd);
+		return -1;
+	}
+
+	close(fd);
+	return 0;
+}
+
+
+static inline int set_resolv_conf(struct client_config_t *cfg,
+				  struct dhcp_packet *packet)
+{
+	FILE *resolv = fopen("/etc/resolv.conf", "w");
+	if (!resolv) {
+		PERROR("Unable to create /etc/resolv.conf");
+		return -1;
+	}
+	populate_resolv_conf(resolv,
+			     udhcp_get_option(packet, DHCP_DNS_SERVER));
+	fclose(resolv);
+	return 0;
+}
+
+
 static void udhcp_run_script(struct client_config_t *cfg, struct dhcp_packet *packet, const char *name)
 {
 	if (!strcmp(name, "bound")) {
-		int fd;
-		struct rtentry rt;
 		NOTE("Running internal script 'bound'");
 
-		fd = socket(AF_INET, SOCK_DGRAM, 0);
-		if (fd == -1) {
-			PERROR("Unable to communicate with kernel");
+		if (!set_addr(cfg, packet))
 			return;
-		}
 
-		bzero(&rt, sizeof(rt));
-
-/* /sbin/route add default gw $i dev $interface metric $((metric++)) */
-
-		rt.rt_dev    = (char *)cfg->interface;
-		rt.rt_metric = 2;
-		fill_default((struct sockaddr_in *)&rt.rt_dst);
-		fill_addr((struct sockaddr_in *)&rt.rt_gateway, udhcp_get_option(packet, DHCP_ROUTER));
-		rt.rt_flags  = (RTF_UP | RTF_GATEWAY);
-
-		/*
-		if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
-			PERROR("Unable to add route");
-			close(fd);
+		if (!set_route(cfg, packet))
 			return;
-		}
-		*/
 
-		close(fd);
-
-		FILE *resolv = fopen("/etc/resolv.conf", "w");
-		if (!resolv) {
-			PERROR("Unable to create /etc/resolv.conf");
+		if (!set_resolv_conf(cfg, packet))
 			return;
-		}
-		populate_resolv_conf(resolv,
-				     udhcp_get_option(packet, DHCP_DNS_SERVER));
-		fclose(resolv);
 	}
 	else
 		NOTE("Need to handle script %s", name);
