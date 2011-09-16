@@ -1,3 +1,4 @@
+#ifdef linux
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -212,3 +213,9 @@ int udev_main(void) {
 
 	exit(3);
 }
+#else
+
+int udev_main(void) {
+    return 0;
+}
+#endif /* linux */

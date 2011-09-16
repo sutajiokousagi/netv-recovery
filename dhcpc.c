@@ -1,3 +1,4 @@
+#ifdef linux
 /* vi: set sw=4 ts=4: */
 /*
  * udhcp client
@@ -1718,3 +1719,9 @@ int udhcpc_main(char *interface)
  ret:
 	return retval;
 }
+
+#else
+int udhcpc_main(char *interface) {
+    return 0;
+}
+#endif /* linux */

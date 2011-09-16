@@ -1,3 +1,4 @@
+#ifdef linux
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -41,3 +42,10 @@ int my_ifup(char *ifname) {
 
 	return 0;
 }
+
+#else
+
+int my_ifup(char *ifname) {
+    return 0;
+}
+#endif /* linux */
