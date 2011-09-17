@@ -13,6 +13,15 @@
 #define _GNU_SOURCE /* To get strchrnul */
 #endif
 
+#ifdef __APPLE__
+static char* strchrnul(const char *s, int c)
+{
+            while (*s != '\0' && *s != c)
+                                s++;
+                    return (char*)s;
+}
+#endif
+
 #include <sys/types.h>
 #include <sys/socket.h> /* netinet/in.h needs it */
 #include <netdb.h>
@@ -36,7 +45,10 @@ typedef int smallint;
 typedef unsigned smalluint;
 
 #define ERROR(format, arg...)            \
-    fprintf(stderr, "wget.c - %s():%d - " format, __func__, __LINE__, ## arg)
+    fprintf(stderr, "wget.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
+#define PERROR(format, arg...)            \
+    fprintf(stderr, "wget.c - %s():%d - " format ": %s\n", __func__, \
+            __LINE__, ## arg, strerror(errno))
 #ifndef offsetof
 # define offsetof(T,F) ((unsigned int)((char *)&((T *)0L)->F - (char *)0L))
 #endif
@@ -65,6 +77,7 @@ struct host_info {
 /* Globals */
 struct globals {
 	off_t content_len;        /* Content-length of the file */
+	off_t total_len;          /* Total length of the file */
 	off_t beg_range;          /* Range at which continue begins */
 	off_t transferred;        /* Number of bytes transferred so far */
 	const char *curfile;      /* Name of current file being transferred */
@@ -191,26 +204,35 @@ static inline void overlapping_strcpy(char *dst, const char *src)
         }
 }
 
+static inline void* xzalloc(size_t size)
+{
+        void *ptr = malloc(size);
+        memset(ptr, 0, size);
+        return ptr;
+}
+
 static inline int xconnect(int s, const struct sockaddr *s_addr, socklen_t addrlen)
 {
-        if (connect(s, s_addr, addrlen) < 0) {
-		close(s);
-                if (s_addr->sa_family == AF_INET)
-                        ERROR("%s (%s)",
+    if (connect(s, s_addr, addrlen) < 0) {
+        close(s);
+        if (s_addr->sa_family == AF_INET)
+            ERROR("%s (%s)",
 				"can't connect to remote host",
-                                inet_ntoa(((struct sockaddr_in *)s_addr)->sin_addr));
-                ERROR("can't connect to remote host");
+                inet_ntoa(((struct sockaddr_in *)s_addr)->sin_addr));
+        ERROR("can't connect to remote host");
 		return -1;
-        }
+    }
 	return 0;
 }
 
 static inline int xconnect_stream(const len_and_sockaddr *lsa)
 {
-        int fd = socket(lsa->u.sa.sa_family, SOCK_STREAM, 0);
-        if (connect(fd, &lsa->u.sa, lsa->len) < 0)
-		return -1;
-        return fd;
+    int fd = socket(lsa->u.sa.sa_family, SOCK_STREAM, 0);
+    if (connect(fd, &lsa->u.sa, lsa->len) < 0) {
+        PERROR("Unable to connect (errno %d)", errno);
+        return -1;
+    }
+    return fd;
 }
 
 /* host: "1.2.3.4[:port]", "www.google.com[:port]"
@@ -231,7 +253,7 @@ static len_and_sockaddr* str2sockaddr(
         r = NULL;
 
         /* Ugly parsing of host:addr */
-	cp = strrchr(host, ':');
+        cp = strrchr(host, ':');
         if (cp) { /* points to ":" or "]:" */
                 int sz = cp - host + 1;
 
@@ -246,10 +268,18 @@ static len_and_sockaddr* str2sockaddr(
 
         /* Next two if blocks allow to skip getaddrinfo()
          * in case host name is a numeric IP(v6) address.
-         * in case host name is a numeric IP(v6) address.
          * getaddrinfo() initializes DNS resolution machinery,
          * scans network config and such - tens of syscalls.
          */
+        struct in_addr in4;
+        if (inet_aton(host, &in4) != 0) {
+                r = xzalloc(offsetof(len_and_sockaddr, u) + sizeof(struct sockaddr_in));
+                r->len = sizeof(struct sockaddr_in);
+                r->u.sa.sa_family = AF_INET;
+                r->u.sin.sin_addr = in4;
+                goto set_port;
+        }
+
 
         memset(&hint, 0 , sizeof(hint));
         hint.ai_family = af;
@@ -264,11 +294,22 @@ static len_and_sockaddr* str2sockaddr(
         }
         used_res = result;
         r = malloc(offsetof(len_and_sockaddr, u) + used_res->ai_addrlen);
+        if (!r) {
+            PERROR("Unable to malloc r");
+            goto ret;
+        }
         r->len = used_res->ai_addrlen;
         memcpy(&r->u.sa, used_res->ai_addr, used_res->ai_addrlen);
 
+ set_port:
+        if (r->u.sa.sa_family == AF_INET) {
+                r->u.sin.sin_port = htons(port);
+                return r;
+        }
+
  ret:
         freeaddrinfo(result);
+        ERROR("Returning %p\n", r);
         return r;
 }
 
@@ -331,7 +372,7 @@ static FILE *open_socket(len_and_sockaddr *lsa)
 	/* hopefully it understands what ESPIPE means... */
 	fp = fdopen(xconnect_stream(lsa), "r+");
 	if (fp == NULL) {
-		ERROR("fdopen");
+		PERROR("fdopen");
 		return NULL;
 	}
 
@@ -455,7 +496,7 @@ retrieve_file_data(struct globals *state,
 
 	polldata.fd = fileno(dfp);
 	polldata.events = POLLIN | POLLPRI;
-	progress(data, 0, state->content_len);
+	progress(data, 0, state->total_len);
 
 	if (state->chunked)
 		goto get_clen;
@@ -481,12 +522,12 @@ retrieve_file_data(struct globals *state,
 				if (safe_poll(&polldata, 1, 1000) != 0)
 					break; /* error, EOF, or data is available */
 				if (second_cnt != 0 && --second_cnt == 0) {
-					progress(data, -1, state->content_len);
+					progress(data, -1, state->total_len);
 					ERROR("download timed out");
 					return -1;
 				}
 				/* Needed for "stalled" indicator */
-				progress(data, state->transferred, state->content_len);
+				progress(data, state->transferred, state->total_len);
 			}
 			/* fread internally uses read loop, which in our case
 			 * is usually exited when we get EAGAIN.
@@ -514,7 +555,7 @@ retrieve_file_data(struct globals *state,
 
 			output_func(data, buf, n);
 			state->transferred += n;
-			progress(data, state->transferred, state->content_len);
+			progress(data, state->transferred, state->total_len);
 			if (state->got_clen) {
 				state->content_len -= n;
 				if (state->content_len == 0)
@@ -536,7 +577,7 @@ retrieve_file_data(struct globals *state,
 		state->got_clen = 1;
 	}
 
-	progress(data, state->transferred, state->content_len);
+	progress(data, state->transferred, state->total_len);
 	return 0;
 }
 
@@ -561,6 +602,7 @@ int do_wget(char *url,
 	struct globals state;
 	char *str;
 	int status;
+    bzero(&state, sizeof(state));
 
 	static const char keywords[] =
 		"content-length\0""transfer-encoding\0""chunked\0""location\0";
@@ -596,8 +638,11 @@ int do_wget(char *url,
 
 	/* Open socket to http server */
 	sfp = open_socket(lsa);
+    if (!sfp)
+        return -1;
 
 	/* Send HTTP request */
+    ERROR("Accessing %s on %s range %d", target.path, target.host, state.beg_range);
 	fprintf(sfp, "GET /%s HTTP/1.1\r\n", target.path);
 
 	fprintf(sfp, "Host: %s\r\nUser-Agent: %s\r\n",
@@ -689,6 +734,7 @@ However, in real world it was observed that some web servers
 		key = index_in_strings(keywords, buf) + 1;
 		if (key == KEY_content_length) {
 			state.content_len = strtoul(str, NULL, 10);
+			state.total_len   = strtoul(str, NULL, 10);
 			if (state.content_len < 0 || errno) {
 				ERROR("content-length %s is garbage", sanitize_string(str));
 			}
@@ -728,7 +774,7 @@ However, in real world it was observed that some web servers
 //			ERROR("bad redirection (no Location: header from server)");
 
 
-	if (retrieve_file_data(&state, sfp, progress, data, handle))
+	if (retrieve_file_data(&state, sfp, progress, handle, data))
 		return -1;
 	handle(data, NULL, 0);
 
