@@ -33,9 +33,34 @@
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
 
+#include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <setjmp.h>
-#include "libbb.h"
-#include "archive.h"
+#include <string.h>
+#include <strings.h>
+#include <errno.h>
+
+#define ERROR(format, arg...)            \
+    fprintf(stderr, "gunzip.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
+#define PERROR(format, arg...)            \
+    fprintf(stderr, "gunzip.c - %s():%d - " format ": %s\n", __func__, \
+            __LINE__, ## arg, strerror(errno))
+
+typedef int smallint;
+typedef unsigned smalluint;
+
+typedef struct inflate_unzip_result {
+    off_t bytes_out;
+    uint32_t crc;
+} inflate_unzip_result;
+
+/* Info struct unpackers can fill out to inform users of thing like
+    * timestamps of unpacked files */
+typedef struct unpack_info_t {
+    time_t mtime;
+} unpack_info_t;
 
 typedef struct huft_t {
 	unsigned char e;	/* number of extra bits or operation */
@@ -67,12 +92,16 @@ enum {
 #define STATE_IN_BSS 0
 #define STATE_IN_MALLOC 1
 
+#define SWAP_LE32(x) (x)
 
 typedef struct state_t {
 	off_t gunzip_bytes_out; /* number of output bytes */
 	uint32_t gunzip_crc;
 
 	int gunzip_src_fd;
+	int (*update_progress)(void *dat, int sofar);
+	void *my_data;
+	unsigned total_read;
 	unsigned gunzip_outbuf_count; /* bytes in output buffer */
 
 	unsigned char *gunzip_window;
@@ -121,6 +150,9 @@ typedef struct state_t {
 } state_t;
 #define gunzip_bytes_out    (S()gunzip_bytes_out   )
 #define gunzip_crc          (S()gunzip_crc         )
+#define update_progress     (S()update_progress    )
+#define my_data             (S()my_data            )
+#define total_read          (S()total_read         )
 #define gunzip_src_fd       (S()gunzip_src_fd      )
 #define gunzip_outbuf_count (S()gunzip_outbuf_count)
 #define gunzip_window       (S()gunzip_window      )
@@ -181,41 +213,126 @@ static state_t state;
 #endif
 
 
-static const uint16_t mask_bits[] ALIGN2 = {
+static const uint16_t mask_bits[] = {
 	0x0000, 0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f, 0x00ff,
 	0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff, 0xffff
 };
 
 /* Copy lengths for literal codes 257..285 */
-static const uint16_t cplens[] ALIGN2 = {
+static const uint16_t cplens[] = {
 	3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59,
 	67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0
 };
 
 /* note: see note #13 above about the 258 in this list. */
 /* Extra bits for literal codes 257..285 */
-static const uint8_t cplext[] ALIGN1 = {
+static const uint8_t cplext[] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5,
 	5, 5, 5, 0, 99, 99
 }; /* 99 == invalid */
 
 /* Copy offsets for distance codes 0..29 */
-static const uint16_t cpdist[] ALIGN2 = {
+static const uint16_t cpdist[] = {
 	1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513,
 	769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
 };
 
 /* Extra bits for distance codes */
-static const uint8_t cpdext[] ALIGN1 = {
+static const uint8_t cpdext[] = {
 	0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10,
 	11, 11, 12, 12, 13, 13
 };
 
 /* Tables for deflate from PKZIP's appnote.txt. */
 /* Order of the bit length code lengths */
-static const uint8_t border[] ALIGN1 = {
+static const uint8_t border[] = {
 	16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
 };
+
+static inline void* xzalloc(size_t size)
+{
+    void *ptr = malloc(size);
+    memset(ptr, 0, size);
+    return ptr;
+}
+
+static inline ssize_t safe_read(int fd, void *buf, size_t count)
+{
+    ssize_t n;
+
+    do {
+        n = read(fd, buf, count);
+    } while (n < 0 && errno == EINTR);
+
+    return n;
+}
+
+static inline ssize_t safe_write(int fd, const void *buf, size_t count)
+{
+    ssize_t n;
+
+    do {
+        n = write(fd, buf, count);
+    } while (n < 0 && errno == EINTR);
+
+    return n;
+}
+
+static inline ssize_t full_write(int fd, const void *buf, size_t len)
+{
+    ssize_t cc;
+    ssize_t total;
+
+    total = 0;
+
+    while (len) {
+        cc = safe_write(fd, buf, len);
+
+        if (cc < 0) {
+            if (total) {
+                /* we already wrote some! */
+                /* user can do another write to know the error code */
+                return total;
+            }
+            return cc;  /* write() returns -1 on failure. */
+        }
+
+        total += cc;
+        buf = ((const char *)buf) + cc;
+        len -= cc;
+    }
+
+    return total;
+}
+
+static inline ssize_t full_read(int fd, void *buf, size_t len)
+{
+    ssize_t cc;
+    ssize_t total;
+
+    total = 0;
+
+    while (len) {
+        cc = safe_read(fd, buf, len);
+
+        if (cc < 0) {
+            if (total) {
+                /* we already have some! */
+                /* user can do another read to know the error code */
+                return total;
+            }
+            return cc; /* read() returns -1 on failure. */
+        }
+        if (cc == 0)
+            break;
+        buf = ((char *)buf) + cc;
+        total += cc;
+        len -= cc;
+    }
+
+    return total;
+}
+
 
 
 /*
@@ -236,6 +353,41 @@ static void huft_free(huft_t *p)
 	}
 }
 
+static inline uint32_t* crc32_filltable(uint32_t *crc_table, int endian)
+{
+    uint32_t polynomial = endian ? 0x04c11db7 : 0xedb88320;
+    uint32_t c;
+    int i, j;
+
+    if (!crc_table)
+        crc_table = malloc(256 * sizeof(uint32_t));
+
+    for (i = 0; i < 256; i++) {
+        c = endian ? (i << 24) : i;
+        for (j = 8; j; j--) {
+            if (endian)
+                c = (c&0x80000000) ? ((c << 1) ^ polynomial) : (c << 1);
+            else
+                c = (c&1) ? ((c >> 1) ^ polynomial) : (c >> 1);
+        }
+        *crc_table++ = c;
+    }
+
+    return crc_table - 256;
+}
+
+static inline uint32_t crc32_block_endian0(uint32_t val, const void *buf, unsigned len, uint32_t *crc_table)
+{
+        const void *end = (uint8_t*)buf + len;
+
+        while (buf != end) {
+                val = crc_table[(uint8_t)val ^ *(uint8_t*)buf] ^ (val >> 8);
+                buf = (uint8_t*)buf + 1;
+        }
+        return val;
+}
+
+
 static void huft_free_all(STATE_PARAM_ONLY)
 {
 	huft_free(inflate_codes_tl);
@@ -244,7 +396,6 @@ static void huft_free_all(STATE_PARAM_ONLY)
 	inflate_codes_td = NULL;
 }
 
-static void abort_unzip(STATE_PARAM_ONLY) NORETURN;
 static void abort_unzip(STATE_PARAM_ONLY)
 {
 	huft_free_all(PASS_STATE_ONLY);
@@ -265,6 +416,7 @@ static unsigned fill_bitbuffer(STATE_PARAM unsigned bitbuffer, unsigned *current
 				error_msg = "unexpected end of file";
 				abort_unzip(PASS_STATE_ONLY);
 			}
+			total_read += bytebuffer_size;
 			if (to_read >= 0) /* unzip only */
 				to_read -= bytebuffer_size;
 			bytebuffer_size += 4;
@@ -274,6 +426,8 @@ static unsigned fill_bitbuffer(STATE_PARAM unsigned bitbuffer, unsigned *current
 		bytebuffer_offset++;
 		*current += 8;
 	}
+	if (update_progress)
+		update_progress(my_data, total_read);
 	return bitbuffer;
 }
 
@@ -503,7 +657,7 @@ static void inflate_codes_setup(STATE_PARAM unsigned my_bl, unsigned my_bd)
 	md = mask_bits[bd];
 }
 /* called once from inflate_get_next_window */
-static NOINLINE int inflate_codes(STATE_PARAM_ONLY)
+static int inflate_codes(STATE_PARAM_ONLY)
 {
 	unsigned e;	/* table entry flag/number of extra bits */
 	huft_t *t;	/* pointer to table entry */
@@ -706,7 +860,7 @@ static int inflate_block(STATE_PARAM smallint *e)
 
 	/* Do we see block type 1 often? Yes!
 	 * TODO: fix performance problem (see below) */
-	//bb_error_msg("blktype %d", t);
+	//ERROR("blktype %d", t);
 
 	/* inflate that block type */
 	switch (t) {
@@ -920,6 +1074,7 @@ static int inflate_block(STATE_PARAM smallint *e)
 	default:
 		abort_unzip(PASS_STATE_ONLY);
 	}
+    return 0;
 }
 
 /* Two callsites, both in inflate_get_next_window */
@@ -970,14 +1125,14 @@ static int inflate_get_next_window(STATE_PARAM_ONLY)
 
 
 /* Called from unpack_gz_stream() and inflate_unzip() */
-static IF_DESKTOP(long long) int
+static int
 inflate_unzip_internal(STATE_PARAM int in, int out)
 {
-	IF_DESKTOP(long long) int n = 0;
+	int n = 0;
 	ssize_t nwrote;
 
 	/* Allocate all global buffers (for DYN_ALLOC option) */
-	gunzip_window = xmalloc(GUNZIP_WSIZE);
+	gunzip_window = malloc(GUNZIP_WSIZE);
 	gunzip_outbuf_count = 0;
 	gunzip_bytes_out = 0;
 	gunzip_src_fd = in;
@@ -1004,11 +1159,10 @@ inflate_unzip_internal(STATE_PARAM int in, int out)
 		int r = inflate_get_next_window(PASS_STATE_ONLY);
 		nwrote = full_write(out, gunzip_window, gunzip_outbuf_count);
 		if (nwrote != (ssize_t)gunzip_outbuf_count) {
-			bb_perror_msg("write");
+			PERROR("write");
 			n = -1;
 			goto ret;
 		}
-		IF_DESKTOP(n += nwrote;)
 		if (r == 0) break;
 	}
 
@@ -1031,30 +1185,6 @@ inflate_unzip_internal(STATE_PARAM int in, int out)
 
 /* External entry points */
 
-/* For unzip */
-
-IF_DESKTOP(long long) int FAST_FUNC
-inflate_unzip(inflate_unzip_result *res, off_t compr_size, int in, int out)
-{
-	IF_DESKTOP(long long) int n;
-	DECLARE_STATE;
-
-	ALLOC_STATE;
-
-	to_read = compr_size;
-//	bytebuffer_max = 0x8000;
-	bytebuffer_offset = 4;
-	bytebuffer = xmalloc(bytebuffer_max);
-	n = inflate_unzip_internal(PASS_STATE in, out);
-	free(bytebuffer);
-
-	res->crc = gunzip_crc;
-	res->bytes_out = gunzip_bytes_out;
-	DEALLOC_STATE;
-	return n;
-}
-
-
 /* For gunzip */
 
 /* helpers first */
@@ -1069,13 +1199,17 @@ static int top_up(STATE_PARAM unsigned n)
 		bytebuffer_offset = 0;
 		bytebuffer_size = full_read(gunzip_src_fd, &bytebuffer[count], bytebuffer_max - count);
 		if ((int)bytebuffer_size < 0) {
-			bb_error_msg(bb_msg_read_error);
+			ERROR("Unable to read");
 			return 0;
 		}
 		bytebuffer_size += count;
 		if (bytebuffer_size < n)
 			return 0;
 	}
+	if (update_progress)
+		update_progress(my_data, total_read);
+    else
+        ERROR("No update_progress!\n");
 	return 1;
 }
 
@@ -1117,7 +1251,7 @@ static int check_header_gzip(STATE_PARAM unpack_info_t *info)
 			uint32_t mtime;
 			uint8_t xtra_flags_UNUSED;
 			uint8_t os_flags_UNUSED;
-		} PACKED formatted;
+		} __attribute__ ((__packed__)) formatted;
 	} header;
 	struct BUG_header {
 		char BUG_header[sizeof(header) == 8 ? 1 : -1];
@@ -1181,11 +1315,11 @@ static int check_header_gzip(STATE_PARAM unpack_info_t *info)
 	return 1;
 }
 
-IF_DESKTOP(long long) int FAST_FUNC
-unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
+static int 
+unpack_gz_stream_with_info(int in, int out, unpack_info_t *info, int (*upd)(void *,int), void *dat)
 {
 	uint32_t v32;
-	IF_DESKTOP(long long) int n;
+	int n;
 	DECLARE_STATE;
 
 	n = 0;
@@ -1193,12 +1327,15 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
 	ALLOC_STATE;
 	to_read = -1;
 //	bytebuffer_max = 0x8000;
-	bytebuffer = xmalloc(bytebuffer_max);
+	bytebuffer = malloc(bytebuffer_max);
 	gunzip_src_fd = in;
+
+    update_progress = upd;
+    my_data = dat;
 
  again:
 	if (!check_header_gzip(PASS_STATE info)) {
-		bb_error_msg("corrupted data");
+		ERROR("corrupted data");
 		n = -1;
 		goto ret;
 	}
@@ -1207,7 +1344,7 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
 		goto ret;
 
 	if (!top_up(PASS_STATE 8)) {
-		bb_error_msg("corrupted data");
+		ERROR("corrupted data");
 		n = -1;
 		goto ret;
 	}
@@ -1215,7 +1352,7 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
 	/* Validate decompression - crc */
 	v32 = buffer_read_le_u32(PASS_STATE_ONLY);
 	if ((~gunzip_crc) != v32) {
-		bb_error_msg("crc error");
+		ERROR("crc error");
 		n = -1;
 		goto ret;
 	}
@@ -1223,7 +1360,7 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
 	/* Validate decompression - size */
 	v32 = buffer_read_le_u32(PASS_STATE_ONLY);
 	if ((uint32_t)gunzip_bytes_out != v32) {
-		bb_error_msg("incorrect length");
+		ERROR("incorrect length");
 		n = -1;
 	}
 
@@ -1237,7 +1374,7 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
 		goto again;
 	}
 	/* GNU gzip says: */
-	/*bb_error_msg("decompression OK, trailing garbage ignored");*/
+	/*ERROR("decompression OK, trailing garbage ignored");*/
 
  ret:
 	free(bytebuffer);
@@ -1245,8 +1382,50 @@ unpack_gz_stream_with_info(int in, int out, unpack_info_t *info)
 	return n;
 }
 
-IF_DESKTOP(long long) int FAST_FUNC
-unpack_gz_stream(int in, int out)
+int 
+unpack_gz_stream(int in, int out, int (*upd)(void *,int), void *dat)
 {
-	return unpack_gz_stream_with_info(in, out, NULL);
+    /* Verify the stream is good */
+    unsigned char magic[2];
+    int res;
+    res = read(in, magic, sizeof(magic));
+    if (res != sizeof(magic)) {
+        PERROR("Couldn't read from in handle");
+        return -1;
+    }
+    if ((magic[0] != 0x1f) || (magic[1] != 0x8b)) {
+        char bfr[4096];
+        ERROR("Invalid gzip magic (wanted 0x1f8b  got 0x%02x%02x  res %d)\n", magic[0], magic[1], res);
+        write(out, magic, res);
+        while ( (res=read(in, bfr, sizeof(bfr))) > 0)
+            write(out, bfr, res);
+        return -1;
+    }
+    return 0;
+	return unpack_gz_stream_with_info(in, out, NULL, upd, dat);
+}
+
+
+
+/* For unzip */
+
+int 
+inflate_unzip(inflate_unzip_result *res, off_t compr_size, int in, int out)
+{
+	int n;
+	DECLARE_STATE;
+
+	ALLOC_STATE;
+
+	to_read = compr_size;
+//	bytebuffer_max = 0x8000;
+	bytebuffer_offset = 4;
+	bytebuffer = malloc(bytebuffer_max);
+	n = inflate_unzip_internal(PASS_STATE in, out);
+	free(bytebuffer);
+
+	res->crc = gunzip_crc;
+	res->bytes_out = gunzip_bytes_out;
+	DEALLOC_STATE;
+	return n;
 }
