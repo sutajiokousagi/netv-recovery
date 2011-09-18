@@ -582,10 +582,7 @@ retrieve_file_data(struct globals *state,
 }
 
 
-int do_wget(char *url,
-            int (*progress)(void *data, int current, int total),
-            int (*handle)(void *data, char *bytes, int len),
-            void *data)
+int do_wget(char *url, int *total)
 {
 	char buf[512];
 	struct host_info server, target;
@@ -760,8 +757,6 @@ However, in real world it was observed that some web servers
 				parse_url(str, &target);
 				if (!use_proxy) {
 					server.host = target.host;
-					/* strip_ipv6_scope_id(target.host); - no! */
-					/* we assume remote never gives us IPv6 addr with scope id */
 					server.port = target.port;
 					free(lsa);
 					goto resolve_lsa;
@@ -774,9 +769,17 @@ However, in real world it was observed that some web servers
 //			ERROR("bad redirection (no Location: header from server)");
 
 
+    ndelay_off(fileno(sfp));
+	clearerr(sfp);
+    ERROR("Chunked? %d", state.chunked);
+    if (total)
+        *total = state.total_len;
+    return fileno(sfp);
+#if 0
 	if (retrieve_file_data(&state, sfp, progress, handle, data))
 		return -1;
 	handle(data, NULL, 0);
 
 	return EXIT_SUCCESS;
+#endif
 }
