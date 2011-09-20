@@ -2,6 +2,7 @@ SOURCES=netv-recovery.c \
     keyboard.c sdl-keyboard.c \
     sdl-picker.c picker.c  \
     textbox.c sdl-textbox.c \
+    progress.c sdl-progress.c \
     wpa-controller.c ap-scan.c ufdisk.c myifup.c dhcpc.c wget.c \
     udev.c gunzip.c
 OBJECTS=$(SOURCES:.c=.o)
