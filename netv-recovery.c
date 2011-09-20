@@ -240,15 +240,22 @@ static int
 download_progress(void *_data, int current)
 {
     struct recovery_data *data = _data;
-    int ds = data->data_size;
     struct progress *progress = data->scene->elements[2].data;
+    static int last_percentage = 0;
+    int ds = data->data_size;
+    int percentage;
+
     if (!ds)
         ds = 1;
-    if (current < (data->last_data_size + 65536))
+    if (current < (data->last_data_size + 32768))
         return 0;
-    NOTE("Download progress: %d%% (%d/%d)\n",
-	(current>>8)*100/(ds>>8), current, data->data_size);
-    set_progress(progress, (current>>8)*100/(ds>>8));
+    percentage = (current>>8)*100/(ds>>8);
+
+    if (percentage != last_percentage)
+        NOTE("Download progress: %d%% (%d/%d)\n", percentage, current, data->data_size);
+    last_percentage = percentage;
+
+    set_progress(progress, percentage);
     redraw_scene(data);
     data->last_data_size = current;
     return 0;
@@ -715,12 +722,12 @@ setup_scenes(struct recovery_data *data)
     textbox2->w = 1000;
     textbox2->h = 128;
     textbox2->data = data;
-    set_label_textbox(textbox2, "Downloading image.  Please wait...");
+    set_label_textbox(textbox2, "Restoring device.  Please wait...");
 
 
     progress = create_progress();
-    progress->x = 500;
-    progress->y = 180;
+    progress->x = 200;
+    progress->y = 400;
     progress->w = 800;
     progress->h = 100;
     progress->border = 10;
