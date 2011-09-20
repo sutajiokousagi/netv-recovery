@@ -96,6 +96,7 @@ struct recovery_data {
     struct ap_description *aps;
 
     int data_size;
+    int last_data_size;
 
     int encryption_type;
     int should_quit;
@@ -239,8 +240,11 @@ download_progress(void *_data, int current)
     struct recovery_data *data = _data;
     if (!data->data_size)
         data->data_size = 1;
+    if (current < (data->last_data_size + 65536))
+        return 0;
     NOTE("Download progress %p: %d%% (%d/%d)\n", data,
 	current*100/data->data_size, current, data->data_size);
+    data->last_data_size = current;
     return 0;
 }
 

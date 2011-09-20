@@ -1209,6 +1209,7 @@ static int top_up(STATE_PARAM unsigned n)
 			ERROR("Unable to read");
 			return 0;
 		}
+		total_read += bytebuffer_size;
 		bytebuffer_size += count;
 		if (bytebuffer_size < n)
 			return 0;

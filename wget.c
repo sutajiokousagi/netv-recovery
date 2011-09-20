@@ -776,7 +776,7 @@ However, in real world it was observed that some web servers
 	ndelay_off(fileno(sfp));
 	clearerr(sfp);
 	if (total)
-		*total = state.total_len;
+		*total = state.content_len;
 	return sfp;
 #if 0
 	if (retrieve_file_data(&state, sfp, progress, handle, data))
