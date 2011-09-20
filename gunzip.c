@@ -1406,11 +1406,7 @@ unpack_gz_stream(FILE *in, int out, int (*upd)(void *,int), void *dat)
         return -1;
     }
     if ((magic[0] != 0x1f) || (magic[1] != 0x8b)) {
-        char bfr[4096];
         ERROR("Invalid gzip magic (wanted 0x1f8b  got 0x%02x%02x  res %d)\n", magic[0], magic[1], res);
-        write(out, magic, res);
-        while ( (res=fread(bfr, sizeof(bfr), 1, in)) > 0)
-            write(out, bfr, res);
         return -1;
     }
 	return unpack_gz_stream_with_info(in, out, NULL, upd, dat);

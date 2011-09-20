@@ -131,7 +131,8 @@ struct wpa_process *start_wpa(char *ssid, char *key, char *iface) {
     create_config(process);
 
     int p[2];
-    pipe(p);
+    if (-1 == pipe(p))
+        PERROR("Unable to create child pipe");
     signal(SIGCHLD, handle_chld);
     process->pid = fork();
     if (!process->pid) {

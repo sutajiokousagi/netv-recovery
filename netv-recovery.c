@@ -294,17 +294,6 @@ wait_a_sec(struct recovery_data *data)
     return 0;
 }
 
-static char *print_addr(uint32_t a) {
-	static char bfr[32];
-	snprintf(bfr, sizeof(bfr)-1, "%u.%u.%u.%u",
-		((char *)&(a))[0],
-		((char *)&(a))[1],
-		((char *)&(a))[2],
-		((char *)&(a))[3]);
-	return bfr;
-}
-
-
 static int
 establish_connection(struct recovery_data *data)
 {

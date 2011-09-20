@@ -114,7 +114,8 @@ int load_firmware(char *msg, int len) {
 		PERROR("Unable to open loading file");
 		return -4;
 	}
-	write(fd, "1\n", 2);
+	if (-1 == write(fd, "1\n", 2))
+		PERROR("Unable to indicate we're loading firmware");
 	close(fd);
 
 	/* Open up the pipe to the kernel */
@@ -128,7 +129,8 @@ int load_firmware(char *msg, int len) {
 
 	/* Begin writing data */
 	while ((len = read(fw, str, sizeof(str))) > 0)
-		write(fd, str, len);
+		if (-1 == write(fd, str, len))
+			PERROR("Unable to write");
 
 	if (len < 0) {
 		PERROR("Error while reading firmware file");
@@ -148,7 +150,8 @@ int load_firmware(char *msg, int len) {
 		PERROR("Unable to open loading file");
 		return -4;
 	}
-	write(fd, "0\n", 2);
+	if (-1 == write(fd, "0\n", 2))
+		PERROR("Unable to indicate successful firmware writing");
 	close(fd);
 
 

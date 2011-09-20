@@ -447,7 +447,7 @@ static inline int set_addr(struct client_config_t *cfg,
 			   struct dhcp_packet *packet)
 {
 	struct ifreq ifr;
-	struct sockaddr_in *addr;
+	struct sockaddr_in addr;
 	int sockfd;
 
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -457,12 +457,12 @@ static inline int set_addr(struct client_config_t *cfg,
 	}
 
 	bzero(&ifr, sizeof(ifr));
-	addr = (struct sockaddr_in *) &(ifr.ifr_addr);
-	bzero(addr, sizeof(*addr));
 
 	strncpy(ifr.ifr_name, cfg->interface, IFNAMSIZ);
-	addr->sin_family = AF_INET;
-	memcpy(&addr->sin_addr, &packet->yiaddr, sizeof(packet->yiaddr));
+	addr.sin_family = AF_INET;
+	memcpy(&addr.sin_addr, &packet->yiaddr, sizeof(packet->yiaddr));
+
+	memcpy(&ifr.ifr_addr, &addr, sizeof(addr));
 
 	if (-1 == ioctl(sockfd, SIOCSIFADDR, &ifr)) {
 		PERROR("Unable to set IP address to %u.%u.%u.%u",
@@ -508,7 +508,7 @@ static inline int set_route(struct client_config_t *cfg,
 {
 	int fd;
 	struct rtentry rt;
-	struct sockaddr_in *addr;
+	struct sockaddr_in addr;
 
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -522,19 +522,19 @@ static inline int set_route(struct client_config_t *cfg,
 	rt.rt_metric = 0;
 	rt.rt_flags  = (RTF_UP | RTF_GATEWAY);
 
-	addr = (struct sockaddr_in*) &rt.rt_gateway;
-	addr->sin_family = AF_INET;
-	memcpy(&addr->sin_addr.s_addr,
+	addr.sin_family = AF_INET;
+	memcpy(&addr.sin_addr.s_addr,
 		udhcp_get_option(packet, DHCP_ROUTER),
-		sizeof(addr->sin_addr.s_addr));
+		sizeof(addr.sin_addr.s_addr));
+	memcpy(&rt.rt_gateway, &addr, sizeof(addr));
 
-	addr = (struct sockaddr_in*) &rt.rt_dst;
-	addr->sin_family = AF_INET;
-	addr->sin_addr.s_addr = inet_addr("0.0.0.0");
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+	memcpy(&rt.rt_dst, &addr, sizeof(addr));
 
-	addr = (struct sockaddr_in*) &rt.rt_genmask;
-	addr->sin_family = AF_INET;
-	addr->sin_addr.s_addr = inet_addr("0.0.0.0");
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+	memcpy(&rt.rt_genmask, &addr, sizeof(addr));
 
 	if (-1 == ioctl(fd, SIOCADDRT, &rt)) {
 		PERROR("Unable to add route");
@@ -542,12 +542,12 @@ static inline int set_route(struct client_config_t *cfg,
 		return -1;
 	}
 
-	addr = (struct sockaddr_in*) &rt.rt_gateway;
+	memcpy(&addr, &rt.rt_gateway, sizeof(addr));
 	NOTE("Set route to %u.%u.%u.%u",
-		((char *)&(addr->sin_addr))[0],
-		((char *)&(addr->sin_addr))[1],
-		((char *)&(addr->sin_addr))[2],
-		((char *)&(addr->sin_addr))[3]);
+		((char *)&(addr.sin_addr))[0],
+		((char *)&(addr.sin_addr))[1],
+		((char *)&(addr.sin_addr))[2],
+		((char *)&(addr.sin_addr))[3]);
 
 	close(fd);
 	return 0;
@@ -1119,7 +1119,8 @@ static int client_background(void)
 	if (pid)
 		return pid;
 
-	chdir("/");
+	if (-1 == chdir("/"))
+		PERROR("Unable to change to root directory");
 
 	close(0);
 	close(1);
@@ -1500,7 +1501,8 @@ static void signal_handler(int sig)
 static void udhcp_sp_setup(void)
 {
         /* was socketpair, but it needs AF_UNIX in kernel */
-        pipe((int *)&signal_pipe);
+        if (-1 == pipe((int *)&signal_pipe))
+		PERROR("Unable to create pipe for children");
 	fcntl(signal_pipe.rd, F_SETFD, FD_CLOEXEC);
 	fcntl(signal_pipe.wr, F_SETFD, FD_CLOEXEC);
 	fcntl(signal_pipe.wr, F_SETFL, fcntl(signal_pipe.wr, F_GETFL) | O_NONBLOCK);
