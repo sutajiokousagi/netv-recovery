@@ -237,6 +237,8 @@ static int
 download_progress(void *_data, int current)
 {
     struct recovery_data *data = _data;
+    if (!data->data_size)
+        data->data_size = 1;
     NOTE("Download progress %p: %d%% (%d/%d)\n", data,
 	current*100/data->data_size, current, data->data_size);
     return 0;
@@ -272,8 +274,12 @@ do_download(struct recovery_data *data)
 
     in = do_wget(IMAGE_URL, &data->data_size);
     if (in <= 0) {
-        perror("Couldn't wget");
+        PERROR("Couldn't wget");
         return -1;
+    }
+    if (!data->data_size) {
+        NOTE("Data size was reported as 0 bytes!\n");
+        data->data_size = 1;
     }
 
     ret = unpack_gz_stream(in, out, download_progress, &data);
@@ -343,14 +349,14 @@ static int my_init_module(char *path) {
     NOTE("Loading module %s\n", path);
     fd = open(path, O_RDONLY);
     if (fd == -1) {
-        perror("Unable to open module");
+        PERROR("Unable to open module");
         return -1;
     }
     fstat(fd, &st);
 
     char dat[st.st_size];
     if (read(fd, dat, sizeof(dat)) != sizeof(dat)) {
-        perror("Couldn't read");
+        PERROR("Couldn't read");
         close(fd);
         return -2;
     }
@@ -358,7 +364,7 @@ static int my_init_module(char *path) {
 
     ret = init_module(dat, sizeof(dat), "");
     if (ret)
-        perror("Unable to load module");
+        PERROR("Unable to load module");
     return ret;
 }
 
@@ -775,17 +781,17 @@ int main(int argc, char **argv) {
     signal(SIGFPE, sig_handle);
 #ifdef linux
     if (mkdir("/dev", 0777) == -1)
-        perror("Unable to mkdir /dev");
+        PERROR("Unable to mkdir /dev");
     if (mkdir("/dev/input", 0777) == -1)
-        perror("Unable to mkdir /dev/input");
+        PERROR("Unable to mkdir /dev/input");
     unlink("/dev/input/event0");
     unlink("/dev/input/event1");
     if (mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64)) == -1)
-        perror("Unable to mknod /dev/input/event0");
+        PERROR("Unable to mknod /dev/input/event0");
     if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
-        perror("Unable to mknod /dev/input/event1");
+        PERROR("Unable to mknod /dev/input/event1");
     if (mknod("/dev/fb0", S_IFCHR | 0777, makedev(29, 0)) == -1)
-        perror("Unable to mknod /dev/fb0");
+        PERROR("Unable to mknod /dev/fb0");
     fprintf(stderr, "Finished trying to set up /dev/\n");
     alarm(1);
 #endif
