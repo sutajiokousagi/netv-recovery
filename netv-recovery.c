@@ -238,8 +238,9 @@ static int
 download_progress(void *_data, int current)
 {
     struct recovery_data *data = _data;
-    if (!data->data_size)
-        data->data_size = 1;
+    int ds = data->data_size;
+    if (!ds)
+        ds = 1;
     if (current < (data->last_data_size + 65536))
         return 0;
     NOTE("Download progress %p: %d%% (%d/%d)\n", data,
@@ -276,7 +277,7 @@ do_download(struct recovery_data *data)
         return -1;
     }
 
-    in = do_wget(IMAGE_URL, &data->data_size);
+    in = start_wget(IMAGE_URL, &data->data_size);
     if (in <= 0) {
         PERROR("Couldn't wget");
         return -1;
@@ -285,6 +286,8 @@ do_download(struct recovery_data *data)
         NOTE("Data size was reported as 0 bytes!\n");
         data->data_size = 1;
     }
+    else
+        NOTE("Doing download.  Data size is %d bytes\n", data->data_size);
 
     ret = unpack_gz_stream(in, out, download_progress, &data);
     close(out);

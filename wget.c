@@ -585,7 +585,7 @@ retrieve_file_data(struct globals *state,
 #endif
 
 
-FILE *do_wget(char *url, int *total)
+FILE *start_wget(char *url, int *total)
 {
 	char buf[512];
 	struct host_info server, target;
@@ -773,10 +773,10 @@ However, in real world it was observed that some web servers
 //			ERROR("bad redirection (no Location: header from server)");
 
 
-	ndelay_off(fileno(sfp));
-	clearerr(sfp);
 	if (total)
 		*total = state.content_len;
+	ndelay_off(fileno(sfp));
+	clearerr(sfp);
 	return sfp;
 #if 0
 	if (retrieve_file_data(&state, sfp, progress, handle, data))
