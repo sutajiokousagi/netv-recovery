@@ -8,6 +8,7 @@ create_progress(void)
     struct progress *new = malloc(sizeof(struct progress));
     bzero(new, sizeof(*new));
     new->border = 10;
+    new->dirty = 1;
     return new;
 }
 

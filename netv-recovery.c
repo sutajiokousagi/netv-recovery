@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 
 #ifdef linux
+#include <sys/reboot.h>
 #include <sys/syscall.h>
 #include <linux/kd.h>
 # define init_module(mod, len, opts) syscall(__NR_init_module, mod, len, opts)
@@ -412,6 +413,14 @@ run_ap_scan(struct recovery_data *data)
 }
 
 void
+do_reboot(struct textbox *txt, int key)
+{
+#ifdef linux
+    reboot(RB_AUTOBOOT);
+#endif
+}
+
+void
 try_again(struct textbox *txt, int key)
 {
     move_to_scene(txt->data, SELECT_SSID);
@@ -710,7 +719,7 @@ setup_scenes(struct recovery_data *data)
 
 
     progress = create_progress();
-    progress->x = 200;
+    progress->x = 500;
     progress->y = 180;
     progress->w = 800;
     progress->h = 100;
@@ -774,11 +783,13 @@ setup_scenes(struct recovery_data *data)
     textbox2->w = 1000;
     textbox2->h = 128;
     textbox2->data = data;
-    set_label_textbox(textbox2, "You can now restart the device");
+    set_label_textbox(textbox2, " ");
+    set_text_textbox(textbox2, "Press any key to reboot");
 
     data->scenes[10].id = DONE;
     data->scenes[10].elements[0].data = textbox;
     data->scenes[10].elements[0].draw = MAKEDRAW(redraw_textbox);
+    data->scenes[10].elements[0].press= MAKEPRESS(do_reboot);
     data->scenes[10].elements[1].data = textbox2;
     data->scenes[10].elements[1].draw = MAKEDRAW(redraw_textbox);
     data->scenes[10].num_elements = 2;

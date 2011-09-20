@@ -15,7 +15,7 @@ static int init_bar(struct progress *progress, SDL_Surface *screen) {
 
 static int reinit_bar(struct progress *progress, SDL_Surface *screen) {
     SDL_Rect r;
-    SDL_FillRect(progress->surface, NULL, SDL_MapRGB(screen->format, 50, 60, 70));
+    SDL_FillRect(progress->surface, NULL, SDL_MapRGB(screen->format, 96, 96, 96));
     r.x = progress->border-5;
     r.y = progress->border-5;
     r.w = progress->w - (progress->border*2)+10;
