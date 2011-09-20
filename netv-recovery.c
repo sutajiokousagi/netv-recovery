@@ -24,6 +24,7 @@
 #include "sdl-keyboard.h"
 #include "sdl-picker.h"
 #include "sdl-textbox.h"
+#include "sdl-progress.h"
 #include "wpa-controller.h"
 #include "ap-scan.h"
 #include "ufdisk.h"
@@ -47,7 +48,7 @@
 #define UNSUPPORTED_ENCRYPTION 8
 #define DOWNLOADING 9
 #define UNRECOVERABLE 10
-#define DONE 10
+#define DONE 11
 
 #define ENC_OPEN 0
 #define ENC_WPA 1
@@ -239,12 +240,15 @@ download_progress(void *_data, int current)
 {
     struct recovery_data *data = _data;
     int ds = data->data_size;
+    struct progress *progress = data->scene->elements[2].data;
     if (!ds)
         ds = 1;
     if (current < (data->last_data_size + 65536))
         return 0;
-    NOTE("Download progress %p: %d%% (%d/%d)\n", data,
-	current*100/ds, current, data->data_size);
+    NOTE("Download progress: %d%% (%d/%d)\n",
+	(current>>8)*100/(ds>>8), current, data->data_size);
+    set_progress(progress, (current>>8)*100/(ds>>8));
+    redraw_scene(data);
     data->last_data_size = current;
     return 0;
 }
@@ -477,6 +481,7 @@ setup_scenes(struct recovery_data *data)
     struct picker *picker;
     struct textbox *textbox;
     struct textbox *textbox2;
+    struct progress *progress;
 
     /* Select SSID */
     NOTE("Creating scene 1\n");
@@ -703,12 +708,23 @@ setup_scenes(struct recovery_data *data)
     textbox2->data = data;
     set_label_textbox(textbox2, "Downloading image.  Please wait...");
 
+
+    progress = create_progress();
+    progress->x = 200;
+    progress->y = 180;
+    progress->w = 800;
+    progress->h = 100;
+    progress->border = 10;
+
+
     data->scenes[8].id = DOWNLOADING;
     data->scenes[8].elements[0].data = textbox;
     data->scenes[8].elements[0].draw = MAKEDRAW(redraw_textbox);
     data->scenes[8].elements[1].data = textbox2;
     data->scenes[8].elements[1].draw = MAKEDRAW(redraw_textbox);
-    data->scenes[8].num_elements = 2;
+    data->scenes[8].elements[2].data = progress;
+    data->scenes[8].elements[2].draw = MAKEDRAW(redraw_progress);
+    data->scenes[8].num_elements = 3;
     data->scenes[8].function = MAKEFUNC(do_download);
 
 
