@@ -244,7 +244,7 @@ download_progress(void *_data, int current)
     if (current < (data->last_data_size + 65536))
         return 0;
     NOTE("Download progress %p: %d%% (%d/%d)\n", data,
-	current*100/data->data_size, current, data->data_size);
+	current*100/ds, current, data->data_size);
     data->last_data_size = current;
     return 0;
 }
@@ -289,7 +289,7 @@ do_download(struct recovery_data *data)
     else
         NOTE("Doing download.  Data size is %d bytes\n", data->data_size);
 
-    ret = unpack_gz_stream(in, out, download_progress, &data);
+    ret = unpack_gz_stream(in, out, download_progress, data);
     close(out);
     fclose(in);
 
