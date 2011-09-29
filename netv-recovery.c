@@ -239,13 +239,80 @@ pick_ssid(char *item, void *_data)
     return 0;
 }
 
+
+static int
+write_file_to_config_area(char *file, char *blk, struct config_area *ca, int fd)
+{
+    struct block_def *bd;
+    int length, offset, block_count;
+    int src;
+
+    bd = ca->block_table;
+    length = 0;
+    offset = 0;
+    block_count = 0;
+    while(!length && !offset && bd->offset != 0xffffffff && block_count < 64) {
+        block_count++;
+        if (!strncmp(blk, bd->n.name, 4)) {
+            length = bd->length;
+            offset = bd->offset;
+            NOTE("Found %s at offset %d, %d bytes long", blk, offset, length);
+        }
+        bd++;
+    }
+
+    if (!length || !offset) {
+        ERROR("Couldn't find %s in config block!", blk);
+        return -1;
+    }
+
+    src = open(file, O_RDONLY);
+    if (-1 == src) {
+        PERROR("Couldn't open %s", file);
+        return -1;
+    }
+
+    if (-1 == lseek(fd, offset, SEEK_SET)) {
+        PERROR("Couldn't seek to offset of %s", blk);
+        close(src);
+        return -1;
+    }
+
+    while(length > 0) {
+        int rd, wr;
+        char bfr[4096];
+        rd = read(src, bfr, length>sizeof(bfr)?sizeof(bfr):length);
+        if (rd == -1) {
+            PERROR("Unable to read source kernel");
+            close(src);
+            return -1;
+        }
+        if (!rd) {
+            NOTE("Reached the end of the kernel on disk, with %d bytes left",
+                length);
+            break;
+        }
+
+        wr = write(fd, bfr, rd);
+        if (rd != wr) {
+            PERROR("Unable to write to %s", blk);
+            close(src);
+            return -1;
+        }
+
+        length -= rd;
+    }
+
+    close(src);
+    return 0;
+}
+
+
 static int
 restore_kernel(struct recovery_data *data)
 {
-    int fd, src_krn;
-    int length, offset, block_count;
+    int fd;
     struct config_area ca;
-    struct block_def *bd;
 
     mkdir("/mnt", 0777);
     if (-1 == mount("/dev/mmcblk0p2", "/mnt", "ext2", MS_RDONLY, NULL)) {
@@ -267,7 +334,7 @@ restore_kernel(struct recovery_data *data)
         close(fd);
         return -1;
     }
-    
+
     /* Read the config block straight off the disk */
     if (read(fd, &ca, sizeof(ca)) != sizeof(ca)) {
         PERROR("Couldn't read config area");
@@ -288,75 +355,18 @@ restore_kernel(struct recovery_data *data)
         return -1;
     }
 
-    bd = ca.block_table;
-    length = 0;
-    offset = 0;
-    block_count = 0;
-    while(!length && !offset && bd->offset != 0xffffffff && block_count < 64) {
-        block_count++;
-        if (!strncmp("krnA", bd->n.name, 4)) {
-            length = bd->length;
-            offset = bd->offset;
-            NOTE("Found krnA at offset %d, at %d bytes long", offset, length);
-        }
-        bd++;
-    }
-
-    if (!length || !offset) {
-        ERROR("Couldn't find krnA in config block!");
-        umount("/mnt");
+    if (-1 == write_file_to_config_area("/mnt/boot/zImage", "krnA", &ca, fd)) {
+        ERROR("Couldn't write kernel");
         close(fd);
+        umount("/mnt");
         return -1;
     }
-
-    src_krn = open("/mnt/boot/zImage", O_RDONLY);
-    if (-1 == src_krn) {
-        PERROR("Couldn't open source kernel");
-        umount("/mnt");
-        close(fd);
-        return -1;
+    
+    if (-1 == write_file_to_config_area("/mnt/boot/logo-preparing.raw.gz", "logo", &ca, fd)) {
+        NOTE("Couldn't write new logo, but error is nonfatal");
     }
+    
 
-    if (-1 == lseek(fd, offset, SEEK_SET)) {
-        PERROR("Couldn't seek to offset of krnA");
-        umount("/mnt");
-        close(src_krn);
-        close(fd);
-        return -1;
-    }
-
-    while(length > 0) {
-        int rd, wr;
-        char bfr[4096];
-        rd = read(src_krn, bfr, length>sizeof(bfr)?sizeof(bfr):length);
-        if (rd == -1) {
-            PERROR("Unable to read source kernel");
-            close(src_krn);
-            umount("/mnt");
-            close(fd);
-            return -1;
-        }
-        if (!rd) {
-            NOTE("Reached the end of the kernel on disk, with %d bytes left",
-                length);
-            break;
-        }
-
-        wr = write(fd, bfr, rd);
-        if (rd != wr) {
-            PERROR("Unable to write to krnA");
-            close(src_krn);
-            umount("/mnt");
-            close(fd);
-            return -1;
-        }
-
-        length -= rd;
-    }
-
-
-
-    close(src_krn);
     close(fd);
     umount("/mnt");
     return 0;
