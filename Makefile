@@ -11,7 +11,7 @@ MY_CFLAGS += `pkg-config sdl --cflags` -Wall -Werror -Os -DDANGEROUS
 MY_LIBS += `pkg-config sdl --libs` -lSDL_ttf
 
 all: $(OBJECTS)
-	$(CC) $(MY_LIBS) $(LIBS) $(LDFLAGS) $(OBJECTS) -o $(EXEC)
+	$(CC) $(LIBS) $(LDFLAGS) $(OBJECTS) $(MY_LIBS) -o $(EXEC)
 
 clean:
 	rm -f $(EXEC) $(OBJECTS)
