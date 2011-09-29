@@ -10,6 +10,7 @@
 #include <zlib.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <sys/mount.h>
 
 #ifdef linux
 #include <sys/reboot.h>
@@ -34,6 +35,7 @@
 #include "udev.h"
 #include "wget.h"
 #include "gunzip.h"
+#include "config-area.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -235,6 +237,127 @@ pick_ssid(char *item, void *_data)
     return 0;
 }
 
+static int
+restore_kernel(struct recovery_data *data)
+{
+    int fd, src_krn;
+    int length, offset, block_count;
+    struct config_area ca;
+    struct block_def *bd;
+
+    mkdir("/mnt", 0777);
+    if (-1 == mount("/dev/mmcblk0p2", "/mnt", "ext2", MS_RDONLY, NULL)) {
+        PERROR("Couldn't mount filesystem");
+        return -1;
+    }
+
+    fd = open("/dev/mmcblk0p1", O_RDWR);
+    if (-1 == fd) {
+        PERROR("Couldn't open partition 1");
+        umount("/mnt");
+        return -1;
+    }
+
+    /* The config block is located at the magic offset of 96 */
+    if (-1 == lseek(fd, 96*512, SEEK_SET)) {
+        PERROR("Couldn't seek to config block");
+        umount("/mnt");
+        close(fd);
+        return -1;
+    }
+    
+    /* Read the config block straight off the disk */
+    if (read(fd, &ca, sizeof(ca)) != sizeof(ca)) {
+        PERROR("Couldn't read config area");
+        umount("/mnt");
+        close(fd);
+        return -1;
+    }
+
+    /* Verify the config area's signature */
+    if(ca.sig[0] != 'C' || ca.sig[1] != 'f'
+    || ca.sig[2] != 'g' || ca.sig[3] != '*') {
+        ERROR("Config block doesn't have proper signature "
+              " (Wanted Cfg*, got %c%c%c%c)\n", 
+              ca.sig[0], ca.sig[1],
+              ca.sig[2], ca.sig[3]);
+        umount("/mnt");
+        close(fd);
+        return -1;
+    }
+
+    bd = ca.block_table;
+    length = 0;
+    offset = 0;
+    block_count = 0;
+    while(!length && !offset && bd->offset != 0xffffffff && block_count < 64) {
+        block_count++;
+        if (!strncmp("krnA", bd->n.name, 4)) {
+            length = bd->length;
+            offset = bd->offset;
+            NOTE("Found krnA at offset %d, at %d bytes long\n", offset, length);
+        }
+    }
+
+    if (!length || !offset) {
+        ERROR("Couldn't find krnA in config block!\n");
+        umount("/mnt");
+        close(fd);
+        return -1;
+    }
+
+    src_krn = open("/mnt/boot/zImage", O_RDONLY);
+    if (-1 == src_krn) {
+        PERROR("Couldn't open source kernel");
+        umount("/mnt");
+        close(fd);
+        return -1;
+    }
+
+    if (-1 == lseek(fd, offset, SEEK_SET)) {
+        PERROR("Couldn't seek to offset of krnA");
+        umount("/mnt");
+        close(src_krn);
+        close(fd);
+        return -1;
+    }
+
+    while(length > 0) {
+        int rd, wr;
+        char bfr[4096];
+        rd = read(src_krn, bfr, length>sizeof(bfr)?sizeof(bfr):length);
+        if (rd == -1) {
+            PERROR("Unable to read source kernel");
+            close(src_krn);
+            umount("/mnt");
+            close(fd);
+            return -1;
+        }
+        if (!rd) {
+            NOTE("Reached the end of the kernel on disk, with %d bytes left\n",
+                length);
+            break;
+        }
+
+        wr = write(fd, bfr, rd);
+        if (rd != wr) {
+            PERROR("Unable to write to krnA");
+            close(src_krn);
+            umount("/mnt");
+            close(fd);
+            return -1;
+        }
+
+        length -= rd;
+    }
+
+
+
+    close(src_krn);
+    close(fd);
+    umount("/mnt");
+    return 0;
+}
 
 static int
 download_progress(void *_data, int current)
@@ -304,6 +427,12 @@ do_download(struct recovery_data *data)
     ret = unpack_gz_stream(in, out, download_progress, data);
     close(out);
     fclose(in);
+
+    /* Attempt to restore the kernel */
+    if (restore_kernel(data)) {
+        move_to_scene(data, UNRECOVERABLE);
+        return -1;
+    }
 
     move_to_scene(data, DONE);
 
