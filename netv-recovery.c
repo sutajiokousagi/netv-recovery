@@ -12,7 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/mount.h>
 
-#define RECOVERY_VERSION 0x100000
+#define RECOVERY_VERSION 0x010001
 
 #ifdef linux
 #include <sys/reboot.h>
@@ -70,9 +70,9 @@ struct recovery_data;
 #define PERROR(format, arg...)            \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
 #define ERROR(format, arg...)            \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format, __func__, __LINE__, ## arg)
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
 #define NOTE(format, arg...)            \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format, __func__, __LINE__, ## arg)
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
 
 
 struct scene_element {
@@ -280,7 +280,7 @@ restore_kernel(struct recovery_data *data)
     if(ca.sig[0] != 'C' || ca.sig[1] != 'f'
     || ca.sig[2] != 'g' || ca.sig[3] != '*') {
         ERROR("Config block doesn't have proper signature "
-              " (Wanted Cfg*, got %c%c%c%c)\n", 
+              " (Wanted Cfg*, got %c%c%c%c)", 
               ca.sig[0], ca.sig[1],
               ca.sig[2], ca.sig[3]);
         umount("/mnt");
@@ -297,12 +297,12 @@ restore_kernel(struct recovery_data *data)
         if (!strncmp("krnA", bd->n.name, 4)) {
             length = bd->length;
             offset = bd->offset;
-            NOTE("Found krnA at offset %d, at %d bytes long\n", offset, length);
+            NOTE("Found krnA at offset %d, at %d bytes long", offset, length);
         }
     }
 
     if (!length || !offset) {
-        ERROR("Couldn't find krnA in config block!\n");
+        ERROR("Couldn't find krnA in config block!");
         umount("/mnt");
         close(fd);
         return -1;
@@ -336,7 +336,7 @@ restore_kernel(struct recovery_data *data)
             return -1;
         }
         if (!rd) {
-            NOTE("Reached the end of the kernel on disk, with %d bytes left\n",
+            NOTE("Reached the end of the kernel on disk, with %d bytes left",
                 length);
             break;
         }
@@ -377,7 +377,8 @@ download_progress(void *_data, int current)
     percentage = (current>>8)*100/(ds>>8);
 
     if (percentage != last_percentage)
-        NOTE("Download progress: %d%% (%d/%d)\n", percentage, current, data->data_size);
+        NOTE("Download progress: %d%% (%d/%d)",
+            percentage, current, data->data_size);
     last_percentage = percentage;
 
     set_progress(progress, percentage);
@@ -397,10 +398,10 @@ do_download(struct recovery_data *data)
 
     ret = prepare_partitions();
     if (ret == -6) {
-        NOTE("Simulation mode detected\n");
+        NOTE("Simulation mode detected");
     }
     else if (ret) {
-        ERROR("Unable to prepare disk: %d\n", ret);
+        ERROR("Unable to prepare disk: %d", ret);
         move_to_scene(data, UNRECOVERABLE);
     }
 
@@ -411,33 +412,39 @@ do_download(struct recovery_data *data)
         out = open("/dev/mmcblk0p2", O_WRONLY);
     if (-1 == out) {
         PERROR("Unable to open output file for compression");
+        move_to_scene(data, UNRECOVERABLE);
         return -1;
     }
 
     in = start_wget(IMAGE_URL, &data->data_size);
     if (in <= 0) {
         PERROR("Couldn't wget");
+        move_to_scene(data, UNRECOVERABLE);
         return -1;
     }
     if (!data->data_size) {
-        NOTE("Data size was reported as 0 bytes!\n");
+        ERROR("Data size was reported as 0 bytes!");
         data->data_size = 1;
+        move_to_scene(data, UNRECOVERABLE);
+        return -1;
     }
     else
-        NOTE("Doing download.  Data size is %d bytes\n", data->data_size);
+        NOTE("Doing download.  Data size is %d bytes", data->data_size);
 
     ret = unpack_gz_stream(in, out, download_progress, data);
     close(out);
     fclose(in);
 
     /* Attempt to restore the kernel */
+    NOTE("Attempting to restore kernel...");
     if (restore_kernel(data)) {
+        ERROR("Kernel restoration failed");
         move_to_scene(data, UNRECOVERABLE);
         return -1;
     }
 
+    NOTE("Finished restoration");
     move_to_scene(data, DONE);
-
     return 0;
 }
 
@@ -476,13 +483,13 @@ establish_connection(struct recovery_data *data)
         stop_wpa(process);
     }
     else {
-        NOTE("Obtaining IP for interface %s\n", data->ifname);
+        NOTE("Obtaining IP for interface %s", data->ifname);
 	data->dhcpc_pid = udhcpc_main(data->ifname);
         if (data->dhcpc_pid < 0) {
-            NOTE("Connection error: %d\n", data->dhcpc_pid);
+            ERROR("Connection error: %d", data->dhcpc_pid);
             move_to_scene(data, CONNECTION_ERROR);
         }
-        NOTE("Connected!\n");
+        NOTE("Connected!");
         move_to_scene(data, CONNECTED);
     }
 
@@ -496,7 +503,7 @@ static int my_init_module(char *path) {
     struct stat st;
     int ret;
 
-    NOTE("Loading module %s\n", path);
+    NOTE("Loading module %s", path);
     fd = open(path, O_RDONLY);
     if (fd == -1) {
         PERROR("Unable to open module");
@@ -536,12 +543,12 @@ run_ap_scan(struct recovery_data *data)
         data->ifname = "wlan2";
     else if (!my_ifup("wlan3"))
         data->ifname = "wlan3";
-    NOTE("Found interface %s\n", data->ifname);
+    NOTE("Found interface %s", data->ifname);
     data->aps = ap_scan(data->ifname);
 
     clear_picker(picker);
     for (i=0; data->aps && data->aps[i].populated; i++) {
-        NOTE("Found AP[%d]: %s\n", i, data->aps[i].ssid);
+        NOTE("Found AP[%d]: %s", i, data->aps[i].ssid);
         add_item_to_picker(picker, data->aps[i].ssid);
     }
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
@@ -567,13 +574,13 @@ try_again(struct textbox *txt, int key)
 static void
 sig_handle(int sig)
 {
-    NOTE("Got signal %d\n", sig);
+    NOTE("Got signal %d", sig);
     if (sig == SIGTERM) {
         SDL_Quit();
         exit(1);
     }
     if (sig == SIGSEGV || sig == SIGILL || sig == SIGTRAP || sig == SIGFPE) {
-        NOTE("That was a very bad signal.  Aborting.\n");
+        NOTE("That was a very bad signal.  Aborting.");
         SDL_Quit();
         exit(1);
     }
@@ -631,7 +638,7 @@ setup_scenes(struct recovery_data *data)
     struct progress *progress;
 
     /* Select SSID */
-    NOTE("Creating scene 1\n");
+    NOTE("Creating scene 1");
     picker = create_picker();
     picker->x = 140;
     picker->y = 120;
@@ -660,7 +667,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 2\n");
+    NOTE("Creating scene 2");
     kbd = create_keyboard(KEYS, SHIFTS);
     kbd->x = 120;
     kbd->y = 270;
@@ -686,7 +693,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 3\n");
+    NOTE("Creating scene 3");
     picker = create_picker();
     picker->x = 140;
     picker->y = 120;
@@ -716,7 +723,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 4\n");
+    NOTE("Creating scene 4");
     kbd = create_keyboard(KEYS, SHIFTS);
     kbd->x = 120;
     kbd->y = 270;
@@ -742,7 +749,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 5\n");
+    NOTE("Creating scene 5");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -760,7 +767,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 6\n");
+    NOTE("Creating scene 6");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -778,7 +785,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 7\n");
+    NOTE("Creating scene 7");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -807,7 +814,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 8\n");
+    NOTE("Creating scene 8");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -836,7 +843,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 9\n");
+    NOTE("Creating scene 9");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -876,7 +883,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 10\n");
+    NOTE("Creating scene 10");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -904,7 +911,7 @@ setup_scenes(struct recovery_data *data)
 
 
 
-    NOTE("Creating scene 11\n");
+    NOTE("Creating scene 11");
     textbox = create_textbox();
     textbox->x = 140;
     textbox->y = 80;
@@ -977,22 +984,22 @@ int main(int argc, char **argv) {
 
     data.should_quit = 0;
 
-    NOTE("Initializing SDL...\n");
+    NOTE("Initializing SDL...");
     if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO)) {
         fprintf(stderr, "Couldn't initialize SDL: %s\n", SDL_GetError());
         return 1;
     }
 
-    NOTE("Initializing TTF engine...\n");
+    NOTE("Initializing TTF engine...");
     if (TTF_Init()) {
         fprintf(stderr, "Couldn't initialize SDL_TTF: %s\n", TTF_GetError());
         return 1;
     }
 
-    NOTE("Running udev...\n");
+    NOTE("Running udev...");
     udev_main();
 
-    NOTE("Loading modules...\n");
+    NOTE("Loading modules...");
     my_init_module("/modules/compat_firmware_class.ko");
     my_init_module("/modules/compat.ko");
     my_init_module("/modules/rfkill_backport.ko");
@@ -1003,10 +1010,10 @@ int main(int argc, char **argv) {
     my_init_module("/modules/mac80211.ko");
     my_init_module("/modules/ath9k_htc.ko");
 
-    NOTE("Setting up scenes...\n");
+    NOTE("Setting up scenes...");
     setup_scenes(&data);
 
-    NOTE("Setting video mode...\n");
+    NOTE("Setting video mode...");
     data.screen = SDL_SetVideoMode(1280, 720, 16, 0);
     alarm(0);
     if (!data.screen) {
@@ -1014,11 +1021,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    NOTE("Moving to scene %d\n", SELECT_SSID);
+    NOTE("Moving to scene %d", SELECT_SSID);
     move_to_scene(&data, SELECT_SSID);
     redraw_scene(&data);
 
-    NOTE("Entering main loop\n");
+    NOTE("Entering main loop");
     while (!data.should_quit) {
 
         SDL_WaitEvent(&e);
