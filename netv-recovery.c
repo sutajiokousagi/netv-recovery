@@ -397,16 +397,6 @@ do_download(struct recovery_data *data)
 
     redraw_scene(data);
 
-    /* Attempt to restore the kernel */
-    NOTE("Attempting to restore kernel...");
-    if (restore_kernel(data)) {
-        ERROR("Kernel restoration failed");
-        move_to_scene(data, UNRECOVERABLE);
-        return -1;
-    }
-    move_to_scene(data, DONE);
-    return 0;
-
     ret = prepare_partitions();
     if (ret == -6) {
         NOTE("Simulation mode detected");
@@ -445,6 +435,15 @@ do_download(struct recovery_data *data)
     ret = unpack_gz_stream(in, out, download_progress, data);
     close(out);
     fclose(in);
+
+    /* Attempt to restore the kernel */
+    NOTE("Attempting to restore kernel...");
+    if (restore_kernel(data)) {
+        ERROR("Kernel restoration failed");
+        move_to_scene(data, UNRECOVERABLE);
+        return -1;
+    }
+
 
     NOTE("Finished restoration");
     move_to_scene(data, DONE);
