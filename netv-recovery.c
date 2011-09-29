@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <sys/mount.h>
 
+#define RECOVERY_VERSION 0x100000
+
 #ifdef linux
 #include <sys/reboot.h>
 #include <sys/syscall.h>
@@ -940,6 +942,10 @@ int main(int argc, char **argv) {
 
     bzero(&data, sizeof(data));
 
+    NOTE("NeTV Recovery version %d.%d.%d", 
+         0xff&(RECOVERY_VERSION>>16),
+         0xff&(RECOVERY_VERSION>>8 ),
+         0xff&(RECOVERY_VERSION>>0 ));
 
     signal(SIGTERM, sig_handle);
     signal(SIGHUP, sig_handle);
