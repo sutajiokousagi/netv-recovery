@@ -12,7 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/mount.h>
 
-#define RECOVERY_VERSION 0x010001
+#define RECOVERY_VERSION 0x010002
 
 #ifdef linux
 #include <sys/reboot.h>
