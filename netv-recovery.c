@@ -74,6 +74,15 @@ struct recovery_data;
 #define NOTE(format, arg...)            \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
 
+static const char *auth_type_str[] = {
+    "OPEN",
+    "WEPAUTO",
+    "WPA2PSK",
+    "WPAPSK",
+    "WPA2EAP",
+    "WPAEAP",
+};
+
 
 struct scene_element {
     void (*draw)(void *data, void *screen);
@@ -233,6 +242,7 @@ pick_ssid(char *item, void *_data)
             move_to_scene(data, TYPE_KEY);
         }
         else {
+            NOTE("User attempted to pick ap %s with auth type %s", ap->ssid, auth_type_str[ap->auth]);
             move_to_scene(data, UNSUPPORTED_ENCRYPTION);
         }
     }
@@ -537,6 +547,7 @@ static int my_init_module(char *path) {
     return ret;
 }
 
+
 static int
 run_ap_scan(struct recovery_data *data)
 {
@@ -560,7 +571,7 @@ run_ap_scan(struct recovery_data *data)
 
     clear_picker(picker);
     for (i=0; data->aps && data->aps[i].populated; i++) {
-        NOTE("Found AP[%d]: %s", i, data->aps[i].ssid);
+        NOTE("Found AP[%d]: %s (%s)", i, data->aps[i].ssid, auth_type_str[data->aps[i].auth]);
         add_item_to_picker(picker, data->aps[i].ssid);
     }
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
