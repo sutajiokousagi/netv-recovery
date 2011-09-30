@@ -1008,6 +1008,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    SDL_ShowCursor(SDL_DISABLE);
+
     NOTE("Running udev...");
     udev_main();
 
