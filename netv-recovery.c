@@ -58,6 +58,9 @@
 #define ENC_OPEN 0
 #define ENC_WPA 1
 
+int errfd;
+FILE *errfil;
+
 //#define IMAGE_URL "http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz"
 #define IMAGE_URL "http://175.41.134.235/build/silvermoon-netv/LATEST/disk-image.gz"
 #define OTHER_NETWORK_STRING "[Other Network]"
@@ -68,11 +71,23 @@ struct recovery_data;
 #define MAKEFUNC(x) ((void (*)(struct recovery_data *))x)
 
 #define PERROR(format, arg...)            \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
+  do { \
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
+    if (errfil) \
+        fprintf(errfil, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
+  } while(0)
 #define ERROR(format, arg...)            \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
+  do { \
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
+    if (errfil) \
+      fprintf(errfil, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
+  } while(0)
 #define NOTE(format, arg...)            \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
+  do { \
+    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
+    if (errfil) \
+      fprintf(errfil, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
+  } while(0)
 
 static const char *auth_type_str[] = {
     "OPEN",
@@ -988,6 +1003,14 @@ int main(int argc, char **argv) {
 #ifdef linux
     if (mkdir("/dev", 0777) == -1)
         PERROR("Unable to mkdir /dev");
+    if (mknod("/dev/tty", S_IFCHR | 0777, makedev(5, 0)) == -1)
+        PERROR("Unable to mknod /dev/tty");
+    if (mknod("/dev/ttyGS0", S_IFCHR | 0777, makedev(249, 0)) == -1)
+        PERROR("Unable to mknod /dev/ttyGS0");
+    errfd = open("/dev/ttyGS0", O_WRONLY);
+    if (-1 != errfd)
+        errfil = fdopen(errfd, "w");
+
     if (mkdir("/dev/input", 0777) == -1)
         PERROR("Unable to mkdir /dev/input");
     unlink("/dev/input/event0");
