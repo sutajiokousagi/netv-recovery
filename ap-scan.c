@@ -1130,6 +1130,12 @@ static int populate_and_print_ap(struct iw_event *event,
             fprintf(stderr, "]\n");
             */
 
+
+            if(ap->auth == AUTH_OPEN && ap->encryption == ENC_NONE) {
+                ap->auth       = AUTH_WPAPSK;
+                ap->encryption = ENC_TKIP;
+            }
+
             /* Handle WPA detecthion */
             if(ie_data[0] == WLAN_EID_VENDOR_SPECIFIC) {
                 int their_length = ie_data[1];
