@@ -23,50 +23,37 @@
 static struct ap_description *found_aps = NULL;
 static int found_ap_count = 0;
 
-//#define WPA_IE_VENDOR_TYPE 0x0050f201
-//#define WPS_IE_VENDOR_TYPE 0x0050f204
-static const char WPA_IE_VENDOR_TYPE[4] = "\x00\x50\xf2\01";
-static const char WPS_IE_VENDOR_TYPE[4] = "\x00\x50\xf2\04";
-#define WLAN_EID_VENDOR_SPECIFIC 0xdd
-#define WLAN_EID_RSN 48
-
-#define RSN_SELECTOR(d, c, b, a) \
-        ((((uint32_t) (a)) << 24) | (((uint32_t) (b)) << 16) \
-       | (((uint32_t) (c)) << 8) | (uint32_t) (d)) 
-
-#define WPA_AUTH_KEY_MGMT_NONE RSN_SELECTOR(0x00, 0x50, 0xf2, 0)
-#define WPA_AUTH_KEY_MGMT_UNSPEC_802_1X RSN_SELECTOR(0x00, 0x50, 0xf2, 1)
-#define WPA_AUTH_KEY_MGMT_PSK_OVER_802_1X RSN_SELECTOR(0x00, 0x50, 0xf2, 2)
-#define WPA_CIPHER_SUITE_NONE RSN_SELECTOR(0x00, 0x50, 0xf2, 0)
-#define WPA_CIPHER_SUITE_WEP40 RSN_SELECTOR(0x00, 0x50, 0xf2, 1)
-#define WPA_CIPHER_SUITE_TKIP RSN_SELECTOR(0x00, 0x50, 0xf2, 2)
-#if 0
-#define WPA_CIPHER_SUITE_WRAP RSN_SELECTOR(0x00, 0x50, 0xf2, 3)
+#ifndef FALSE
+#define FALSE 0
 #endif
-#define WPA_CIPHER_SUITE_CCMP RSN_SELECTOR(0x00, 0x50, 0xf2, 4)
-#define WPA_CIPHER_SUITE_WEP104 RSN_SELECTOR(0x00, 0x50, 0xf2, 5)
+#ifndef TRUE
+#define TRUE 1
+#endif
 
+#define IEEE80211_ELEMID_SSID                   0
+#define IEEE80211_ELEMID_RSN 			48
+#define IEEE80211_ELEMID_VENDOR 		221
+#define RSN_OUI                 0xac0f00
 
-#define RSN_AUTH_KEY_MGMT_UNSPEC_802_1X RSN_SELECTOR(0x00, 0x0f, 0xac, 1)
-#define RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X RSN_SELECTOR(0x00, 0x0f, 0xac, 2)
-#ifdef CONFIG_IEEE80211R
-#define RSN_AUTH_KEY_MGMT_FT_802_1X RSN_SELECTOR(0x00, 0x0f, 0xac, 3)
-#define RSN_AUTH_KEY_MGMT_FT_PSK RSN_SELECTOR(0x00, 0x0f, 0xac, 4)
-#endif /* CONFIG_IEEE80211R */
-#define RSN_AUTH_KEY_MGMT_802_1X_SHA256 RSN_SELECTOR(0x00, 0x0f, 0xac, 5)
-#define RSN_AUTH_KEY_MGMT_PSK_SHA256 RSN_SELECTOR(0x00, 0x0f, 0xac, 6)
+#define RSN_ASE_8021X_NONE      0x00
+#define RSN_ASE_8021X_UNSPEC    0x01
+#define RSN_ASE_8021X_PSK       0x02
 
-#define RSN_CIPHER_SUITE_NONE RSN_SELECTOR(0x00, 0x0f, 0xac, 0)
-#define RSN_CIPHER_SUITE_WEP40 RSN_SELECTOR(0x00, 0x0f, 0xac, 1)
-#define RSN_CIPHER_SUITE_TKIP RSN_SELECTOR(0x00, 0x0f, 0xac, 2)
-#if 0
-#define RSN_CIPHER_SUITE_WRAP RSN_SELECTOR(0x00, 0x0f, 0xac, 3)
-#endif 
-#define RSN_CIPHER_SUITE_CCMP RSN_SELECTOR(0x00, 0x0f, 0xac, 4)
-#define RSN_CIPHER_SUITE_WEP104 RSN_SELECTOR(0x00, 0x0f, 0xac, 5)
-#ifdef CONFIG_IEEE80211W
-#define RSN_CIPHER_SUITE_AES_128_CMAC RSN_SELECTOR(0x00, 0x0f, 0xac, 6)
-#endif /* CONFIG_IEEE80211W */
+#define RSN_CSE_NULL            0x00
+#define RSN_CSE_WEP40           0x01
+#define RSN_CSE_TKIP            0x02
+#define RSN_CSE_WRAP            0x03
+#define RSN_CSE_CCMP            0x04
+#define RSN_CSE_WEP104          0x05
+
+#define RSN_VERSION             1 
+
+#define WPA_OUI                 0xf25000
+#define WPA_OUI_TYPE            0x01
+#define WPA_VERSION             1
+
+#define 	min_c(a, b)   ((a)>(b)?(b):(a))
+
 
 
 
@@ -110,11 +97,6 @@ static const char *chumby_auths[] = {
 
 #define IW_SCAN_HACK            0x8000
 
-
-#define WPS_PRESENT 1
-#define WPS_PBC 2
-#define WPS_PIN 4
-#define WPS_NIP 8
 
 
 /****************************** STOLEN ******************************/
@@ -197,6 +179,14 @@ struct iw_ioctl_description
     __u16   min_tokens;     /* Min acceptable token number */
     __u16   max_tokens;     /* Max acceptable token number */
     __u32   flags;          /* Special handling of the request */
+};
+
+/* ie_data taken from Haiku's NetworkDevice.cpp */
+
+struct ie_data {
+	uint8_t	type;
+	uint8_t	length;
+	uint8_t	data[1];
 };
 
 /* -------------------------- VARIABLES -------------------------- */
@@ -731,294 +721,247 @@ int iw_get_range_info(int skfd, const char *ifname, iwrange *range) {
 
 /***************************** SCANNING *****************************/
 
-struct rsn_ie_hdr {
-    uint8_t elem_id; /* WLAN_EID_RSN */
-    uint8_t len;
-    uint8_t version[2]; /* little endian */
-} __attribute__ ((packed));
+
+
+/* --- TAKEN FROM BIONIC ---
+ * Copy src to string dst of size siz.  At most siz-1 characters
+ * will be copied.  Always NUL terminates (unless siz == 0).
+ * Returns strlen(src); if retval >= siz, truncation occurred.
+ */
+size_t
+strlcpy(char *dst, const char *src, size_t siz)
+{
+    char *d = dst;
+    const char *s = src;
+    size_t n = siz;
+
+    /* Copy as many bytes as will fit */
+    if (n != 0) {
+        while (--n != 0) {
+            if ((*d++ = *s++) == '\0')
+                break;
+        }
+    }
+
+    /* Not enough room in dst, add NUL and traverse rest of src */
+    if (n == 0) {
+        if (siz != 0)
+            *d = '\0';      /* NUL-terminate dst */
+        while (*s++)
+            ;
+    }
+
+    return(s - src - 1);    /* count does not include NUL */
+}
+
+
+
+static uint16_t
+read_le16(uint8_t **data, int32_t *length)
+{
+	uint16_t value;
+	memcpy(&value, *data, sizeof(value));
+	*data += 2;
+	*length -= 2;
+	return value;
+}
+
+static uint32_t
+read_le32(uint8_t** data, int32_t *length)
+{
+	uint32_t value;
+	memcpy(&value, *data, sizeof(value));
+	*data += 4;
+	*length -= 4;
+	return value;
+}
+
+static uint32_t
+from_rsn_cipher(uint32_t cipher)
+{
+	if ((cipher & 0xffffff) != RSN_OUI)
+		return ENC_AES;
+
+	switch (cipher >> 24) {
+		case RSN_CSE_NULL:
+			return ENC_NONE;
+		case RSN_CSE_WEP40:
+			return ENC_WEP;
+		case RSN_CSE_WEP104:
+			return ENC_WEP;
+		case RSN_CSE_TKIP:
+			return ENC_TKIP;
+		default:
+		case RSN_CSE_CCMP:
+			return ENC_AES;
+		case RSN_CSE_WRAP:
+			return ENC_HUH;
+	}
+}
+
+static uint32_t
+from_rsn_key_mode(uint32_t mode)
+{
+	if ((mode & 0xffffff) != RSN_OUI)
+		return AUTH_DUNNO;
+
+	switch (mode >> 24) {
+		default:
+		case RSN_ASE_8021X_UNSPEC:
+			return AUTH_DUNNO;
+		case RSN_ASE_8021X_PSK:
+			return AUTH_WPAPSK;
+		// the following are currently not defined in net80211
+		case 3:
+			return AUTH_DUNNO;
+		case 4:
+			return AUTH_WPAPSK;
+		case 5:
+			return AUTH_DUNNO;
+		case 6:
+			return AUTH_WPA2PSK;
+	}
+}
+
+
+/* Taken from NetworkDevice.cpp from Haiku */
+static void
+parse_ie_rsn_wpa(struct ap_description *ap, uint8_t **data, int32_t *length)
+{
+	if (*length >= 4) {
+		// parse group cipher
+		ap->encryption = from_rsn_cipher(read_le32(data, length));
+	} else if (*length > 0)
+		return;
+
+	if (*length >= 2) {
+		// parse unicast cipher
+		uint16_t count = read_le16(data, length);
+		uint16_t i;
+		ap->encryption = 0;
+
+		for (i = 0; i < count; i++) {
+			if (*length < 4)
+				return;
+			ap->encryption = from_rsn_cipher(read_le32(data, length));
+		}
+	} else if (*length > 0)
+		return;
+
+	if (*length >= 2) {
+		// parse key management mode
+		uint16_t count = read_le16(data, length);
+		uint16_t i;
+		ap->auth = 0;
+
+		for (i = 0; i < count; i++) {
+			if (*length < 4)
+				return;
+			ap->auth |= from_rsn_key_mode(read_le32(data, length));
+		}
+	} else if (*length > 0)
+		return;
+
+	// TODO: capabilities, and PMKID following in case of RSN
+}
+
+
+static void
+parse_ie_rsn(struct ap_description *ap, struct ie_data* ie)
+{
+	ap->auth = AUTH_WPA2PSK;
+	ap->encryption = ENC_AES;
+
+	int32_t length = ie->length;
+	if (length < 2)
+		return;
+
+	uint8_t* data = ie->data;
+
+	uint16_t version = read_le16(&data, &length);
+	if (version != RSN_VERSION)
+		return;
+
+	parse_ie_rsn_wpa(ap, &data, &length);
+}
+
+static uint8_t
+parse_ie_wpa(struct ap_description *ap, struct ie_data* ie)
+{
+	int32_t length = ie->length;
+	if (length < 6)
+		return FALSE;
+
+	uint8_t* data = ie->data;
+
+	uint32_t oui = read_le32(&data, &length);
+	if (oui != ((WPA_OUI_TYPE << 24) | WPA_OUI))
+		return FALSE;
+
+	uint16_t version = read_le16(&data, &length);
+	if (version != WPA_VERSION)
+		return FALSE;
+
+	ap->auth = AUTH_WPAPSK;
+	ap->encryption = ENC_TKIP;
+
+	parse_ie_rsn_wpa(ap, &data, &length);
+	return TRUE;
+}
+
+
+
+
+/* Taken from NetworkDevice.cpp from Haiku */
+static int
+parse_ie(struct ap_description *ap, uint8_t *_ie, int32_t ieLength) {
+	struct ie_data* ie = (struct ie_data*)_ie;
+	int hadRSN = FALSE;
+	int hadWPA = FALSE;
+
+	while (ieLength > 1) {
+		switch (ie->type) {
+			case IEEE80211_ELEMID_SSID:
+				strlcpy(ap->ssid, (char*)ie->data,
+					min_c(ie->length + 1, (int)sizeof(ap->ssid)));
+				break;
+			case IEEE80211_ELEMID_RSN:
+				parse_ie_rsn(ap, ie);
+				hadRSN = TRUE;
+				break;
+			case IEEE80211_ELEMID_VENDOR:
+				if (!hadRSN && parse_ie_wpa(ap, ie))
+					hadWPA = TRUE;
+				break;
+		}
+
+		ieLength -= 2 + ie->length;
+		ie = (struct ie_data*)((uint8_t*)ie + 2 + ie->length);
+	}
+
+	if (hadRSN || hadWPA) {
+		// Determine authentication mode
 
 /*
- * This one behave quite differently from the others
- *
- * Note that we don't use the scanning capability of iwlib (functions
- * iw_process_scan() and iw_scan()). The main reason is that
- * iw_process_scan() return only a subset of the scan data to the caller,
- * for example custom elements and bitrates are ommited. Here, we
- * do the complete job...
- */
-
-
-
-/* Interpret the WPA generic information element that's vendor-specific, as
- * indicated by the packet type 0xdd.
- * We can figure this out by parsing through the passed data and
- * recognizing tags.
- */
-static void handle_wpa_vendor(struct ap_description *ap, uint8_t *ie_data,
-                       int length) {
-    uint32_t offset = 0;
-    uint32_t ie_cmp;
-    uint16_t count;
-    int i;
-
-    ap->auth = AUTH_WPAPSK;
-
-
-    // Figure out the group cipher.
-    memcpy(&ie_cmp, ie_data+offset, sizeof(ie_cmp));
-    if(ie_cmp == WPA_CIPHER_SUITE_NONE) {
-//        fprintf(stderr, "Found NONE cipher.\n");
-        ap->auth       = AUTH_OPEN;
-        ap->encryption = ENC_NONE;
-    }
-    else if(ie_cmp == WPA_CIPHER_SUITE_WEP104) {
-//        fprintf(stderr, "Found WEP104 cipher.\n");
-        ap->auth       = AUTH_WEPAUTO;
-        ap->encryption = ENC_WEP;
-    }
-    else if(ie_cmp == WPA_CIPHER_SUITE_WEP40) {
-//        fprintf(stderr, "Found WEP40 cipher.\n");
-        ap->auth       = AUTH_WPAEAP;
-    }
-    else if(ie_cmp == WPA_CIPHER_SUITE_TKIP) {
-//        fprintf(stderr, "Found TKIP cipher.\n");
-        ap->encryption = ENC_TKIP;
-    }
-    else if(ie_cmp == WPA_CIPHER_SUITE_CCMP) {
-//        fprintf(stderr, "Found CCMP cipher.\n");
-        ap->encryption = ENC_AES;
-    }
-    else {
-        fprintf(stderr, "Unrecognized pairwise cipher: [%02x %02x %02x %02x %02x %02x]\n", ie_data[offset+0], ie_data[offset+1], ie_data[offset+2], ie_data[offset+3], ie_data[offset+4], ie_data[offset+5]);
-    }
-    offset += 4;
-
-
-    // Figure out the pairwise ciphers.
-//    fprintf(stderr, "Reading pairwise ciper count [%02x %02x]\n", ie_data[offset+0], ie_data[offset+1]);
-    memcpy(&count, ie_data+offset, sizeof(count));
-    count = SWAB_16(count);
-    offset += sizeof(count);
-
-
-//    fprintf(stderr, "Looking through %d pairwise ciphers...\n", count);
-    for(i=0; i<count && offset<length; offset+=4, i++) {
-        /* Copy over ie_data to prevent alignment issues */
-        uint32_t ie_cmp;
-        memcpy(&ie_cmp, ie_data+offset, sizeof(ie_cmp));
-        if(ie_cmp == WPA_CIPHER_SUITE_NONE) {
-//            fprintf(stderr, "Found NONE cipher.\n");
-            ap->auth       = AUTH_OPEN;
-            ap->encryption = ENC_NONE;
-        }
-        else if(ie_cmp == WPA_CIPHER_SUITE_WEP104) {
-//            fprintf(stderr, "Found WEP104 cipher.\n");
-            ap->auth       = AUTH_WEPAUTO;
-            ap->encryption = ENC_WEP;
-        }
-        else if(ie_cmp == WPA_CIPHER_SUITE_WEP40) {
-//            fprintf(stderr, "Found WEP40 cipher.\n");
-            ap->auth       = AUTH_WEPAUTO;
-            ap->encryption = ENC_WEP;
-        }
-        else if(ie_cmp == WPA_CIPHER_SUITE_TKIP) {
-//            fprintf(stderr, "Found TKIP cipher.\n");
-            ap->encryption = ENC_TKIP;
-        }
-        else if(ie_cmp == WPA_CIPHER_SUITE_CCMP) {
-//            fprintf(stderr, "Found CCMP cipher.\n");
-            ap->encryption = ENC_AES;
-        }
-        else {
-            fprintf(stderr, "Unrecognized pairwise cipher: [%02x %02x %02x %02x]\n", ie_data[offset+0], ie_data[offset+1], ie_data[offset+2], ie_data[offset+3]);
-        }
-    }
-
-
-    // Figure out the key management schemes.
-//    fprintf(stderr, "Reading pairwise ciper count [%02x %02x]\n", ie_data[offset+0], ie_data[offset+1]);
-    memcpy(&count, ie_data+offset, sizeof(count));
-    count = SWAB_16(count);
-    offset += sizeof(count);
-
-//    fprintf(stderr, "Looking through %d key management schemes...\n", count);
-    for(i=0; i<count && offset<length; offset+=4, i++) {
-        /* Copy over ie_data to prevent alignment issues */
-        uint32_t ie_cmp;
-        memcpy(&ie_cmp, ie_data+offset, sizeof(ie_cmp));
-        if(ie_cmp == WPA_AUTH_KEY_MGMT_UNSPEC_802_1X) {
-//            fprintf(stderr, "Found EAP management.\n");
-            ap->auth       = AUTH_WPAEAP;
-        }
-        else if(ie_cmp == WPA_AUTH_KEY_MGMT_PSK_OVER_802_1X) {
-//            fprintf(stderr, "Found PSK management.\n");
-            ap->auth       = AUTH_WPAPSK;
-        }
-        else {
-            fprintf(stderr, "Unrecognized key management: [%02x %02x %02x %02x]\n", ie_data[offset+0], ie_data[offset+1], ie_data[offset+2], ie_data[offset+3]);
-        }
-    }
-
-
-    if((length-offset) == 0) {
-        ;
-    }
-    else if((length-offset) == 2) {
-//        fprintf(stderr, "Ignoring capabilities\n");
-    }
-    else {
-        int i;
-        fprintf(stderr, "Packet had %d bytes left:", length-offset);
-        for(i=offset; i<length; i++)
-            fprintf(stderr, " %02x", ie_data[i]);
-        fprintf(stderr, "\n");
-    }
+		if ((network.key_mode & (B_KEY_MODE_IEEE802_1X_SHA256
+				| B_KEY_MODE_PSK_SHA256)) != 0) {
+			network.authentication_mode = B_NETWORK_AUTHENTICATION_WPA2;
+		} else if ((network.key_mode & (B_KEY_MODE_IEEE802_1X
+				| B_KEY_MODE_PSK | B_KEY_MODE_FT_IEEE802_1X
+				| B_KEY_MODE_FT_PSK)) != 0) {
+			if (!hadRSN)
+				network.authentication_mode = B_NETWORK_AUTHENTICATION_WPA;
+		} else if ((network.key_mode & B_KEY_MODE_NONE) != 0) {
+			if ((network.cipher & (B_NETWORK_CIPHER_WEP_40
+					| B_NETWORK_CIPHER_WEP_104)) != 0)
+				network.authentication_mode = B_NETWORK_AUTHENTICATION_WEP;
+			else
+				network.authentication_mode = B_NETWORK_AUTHENTICATION_NONE;
+		}
+*/
+	}
+	return 0;
 }
-
-static void handle_wpa_rsn(struct ap_description *ap, uint8_t *ie_data,
-                       int length) {
-    uint32_t offset = 0;
-    uint32_t ie_cmp;
-    uint16_t count;
-    int i;
-
-    ap->auth = AUTH_WPA2PSK;
-
-
-    // Figure out the group cipher.
-    memcpy(&ie_cmp, ie_data+offset, sizeof(ie_cmp));
-    if(ie_cmp == RSN_CIPHER_SUITE_NONE) {
-//        fprintf(stderr, "Found NONE cipher.\n");
-        ap->auth       = AUTH_OPEN;
-        ap->encryption = ENC_NONE;
-    }
-    else if(ie_cmp == RSN_CIPHER_SUITE_WEP104) {
-//        fprintf(stderr, "Found WEP104 cipher.\n");
-        ap->auth       = AUTH_WEPAUTO;
-        ap->encryption = ENC_WEP;
-    }
-    else if(ie_cmp == RSN_CIPHER_SUITE_WEP40) {
-//        fprintf(stderr, "Found WEP40 cipher.\n");
-        ap->auth       = AUTH_WEPAUTO;
-        ap->encryption = ENC_WEP;
-    }
-    else if(ie_cmp == RSN_CIPHER_SUITE_TKIP) {
-//        fprintf(stderr, "Found TKIP cipher.\n");
-        ap->encryption = ENC_TKIP;
-    }
-    else if(ie_cmp == RSN_CIPHER_SUITE_CCMP) {
-//        fprintf(stderr, "Found CCMP cipher.\n");
-        ap->encryption = ENC_AES;
-    }
-    else {
-        fprintf(stderr, "Unrecognized pairwise cipher: [%02x %02x %02x %02x %02x %02x]\n", ie_data[offset+0], ie_data[offset+1], ie_data[offset+2], ie_data[offset+3], ie_data[offset+4], ie_data[offset+5]);
-    }
-    offset += 4;
-
-
-    // Figure out the pairwise ciphers.
-//    fprintf(stderr, "Reading pairwise ciper count [%02x %02x]\n", ie_data[offset+0], ie_data[offset+1]);
-    memcpy(&count, ie_data+offset, sizeof(count));
-    count = SWAB_16(count);
-    offset += sizeof(count);
-
-
-//    fprintf(stderr, "Looking through %d pairwise ciphers...\n", count);
-    for(i=0; i<count && offset<length; offset+=4, i++) {
-        /* Copy over ie_data to prevent alignment issues */
-        uint32_t ie_cmp;
-        memcpy(&ie_cmp, ie_data+offset, sizeof(ie_cmp));
-        if(ie_cmp == RSN_CIPHER_SUITE_NONE) {
-//            fprintf(stderr, "Found NONE cipher.\n");
-            ap->auth       = AUTH_OPEN;
-            ap->encryption = ENC_NONE;
-        }
-        else if(ie_cmp == RSN_CIPHER_SUITE_WEP104) {
-//            fprintf(stderr, "Found WEP104 cipher.\n");
-            ap->auth       = AUTH_WEPAUTO;
-            ap->encryption = ENC_WEP;
-        }
-        else if(ie_cmp == RSN_CIPHER_SUITE_WEP40) {
-//            fprintf(stderr, "Found WEP40 cipher.\n");
-            ap->auth       = AUTH_WEPAUTO;
-            ap->encryption = ENC_WEP;
-        }
-        else if(ie_cmp == RSN_CIPHER_SUITE_TKIP) {
-//            fprintf(stderr, "Found TKIP cipher.\n");
-            ap->encryption = ENC_TKIP;
-        }
-        else if(ie_cmp == RSN_CIPHER_SUITE_CCMP) {
-//            fprintf(stderr, "Found CCMP cipher.\n");
-            ap->encryption = ENC_AES;
-        }
-        else {
-            fprintf(stderr, "Unrecognized pairwise cipher: [%02x %02x %02x %02x]\n", ie_data[offset+0], ie_data[offset+1], ie_data[offset+2], ie_data[offset+3]);
-        }
-    }
-
-
-    // Figure out the key management schemes.
-//    fprintf(stderr, "Reading pairwise ciper count [%02x %02x]\n", ie_data[offset+0], ie_data[offset+1]);
-    memcpy(&count, ie_data+offset, sizeof(count));
-    count = SWAB_16(count);
-    offset += sizeof(count);
-
-//    fprintf(stderr, "Looking through %d key management schemes...\n", count);
-    for(i=0; i<count && offset<length; offset+=4, i++) {
-        /* Copy over ie_data to prevent alignment issues */
-        uint32_t ie_cmp;
-        memcpy(&ie_cmp, ie_data+offset, sizeof(ie_cmp));
-        if(ie_cmp == RSN_AUTH_KEY_MGMT_UNSPEC_802_1X) {
-//            fprintf(stderr, "Found EAP management.\n");
-            ap->auth       = AUTH_WPA2EAP;
-        }
-        else if(ie_cmp == RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X) {
-//            fprintf(stderr, "Found PSK management.\n");
-            ap->auth       = AUTH_WPA2PSK;
-        }
-        else {
-            fprintf(stderr, "Unrecognized key management: [%02x %02x %02x %02x]\n", ie_data[offset+0], ie_data[offset+1], ie_data[offset+2], ie_data[offset+3]);
-        }
-    }
-
-
-    if((length-offset) == 0) {
-        ;
-    }
-    else if((length-offset) == 2) {
-//        fprintf(stderr, "Ignoring capabilities\n");
-    }
-    else {
-        int i;
-        fprintf(stderr, "Packet had %d bytes left:", length-offset);
-        for(i=offset; i<length; i++)
-            fprintf(stderr, " %02x", ie_data[i]);
-        fprintf(stderr, "\n");
-    }
-}
-
-#if 0
-static char *wps_string(struct ap_description *ap) {
-    static char wps_description[128];
-    int components = 0;
-    /*
-    if(ap->wps & WPS_PBC) {
-        snprintf(wps_description, 
-    }
-    */
-
-    if(ap->wps & WPS_PRESENT) {
-        snprintf(wps_description, sizeof(wps_description), "yes");
-        components = 1;
-    }
-
-    if(!components) {
-        snprintf(wps_description, sizeof(wps_description), "no");
-    }
-
-    return wps_description;
-}
-#endif
 
 static void print_ap(struct ap_description *ap) {
     found_ap_count++;
@@ -1115,86 +1058,7 @@ static int populate_and_print_ap(struct iw_event *event,
         case IWEVGENIE: {
             uint8_t *ie_data = (uint8_t *)event->u.data.pointer;
             int      length  = event->u.data.length;
-/*
-            int      pos;
-            int      wpa_handled = 0;
-*/
-
-            /*
-            fprintf(stderr, "Just got an IE.  Dump: [");
-            for(pos=0; pos<length; pos++)
-                fprintf(stderr, "%02x", ie_data[pos]);
-            fprintf(stderr, "   ");
-            for(pos=0; pos<length; pos++)
-                fprintf(stderr, " %d", ie_data[pos]);
-            fprintf(stderr, "]\n");
-            */
-
-
-            /* Handle WPA detecthion */
-            if(ie_data[0] == WLAN_EID_VENDOR_SPECIFIC) {
-                int their_length = ie_data[1];
-                int actual_length = length-2;
-
-                /*
-                fprintf(stderr, "Got vendor IE.  Dump: [");
-                fprintf(stderr, "%02x", ie_data[0]);
-                for(pos=1; pos<length; pos++)
-                    fprintf(stderr, " %02x", ie_data[pos]);
-                fprintf(stderr, "]\n");
-                */
-
-                // The length contained in the packet should reflect how
-                // much data we ot back.
-                if(their_length != actual_length) {
-                    if(actual_length > their_length)
-                        actual_length = their_length;
-                    fprintf(stderr, "WARNING!! Their length (%d) doesn't match the length of received data(%d).  Going with the smaller of the two (%d)",
-                            their_length, length, actual_length);
-                }
-
-                // skip past the OUI and version headers.
-                handle_wpa_vendor(ap, ie_data+8, actual_length-6);
-            }
-
-            else if(ie_data[0] == WLAN_EID_RSN) {
-                int their_length = ie_data[1]-2;
-                int actual_length = length-4;
-
-                /*
-                fprintf(stderr, "Got RSN IE.  Dump: [");
-                fprintf(stderr, "%02x", ie_data[0]);
-                for(pos=1; pos<length; pos++)
-                    fprintf(stderr, " %02x", ie_data[pos]);
-                fprintf(stderr, "]\n");
-                */
-
-                // The length contained in the packet should reflect how
-                // much data we ot back.
-                if(their_length != actual_length) {
-                    if(actual_length > their_length)
-                        actual_length = their_length;
-                    fprintf(stderr, "WARNING!! Their length (%d) doesn't match the length of received data(%d).  Going with the smaller of the two (%d)",
-                            their_length, length, actual_length);
-                }
-                handle_wpa_rsn(ap, ie_data+4, actual_length);
-            }
-
-            #if 0
-            if(!wpa_handled && ie_data[0] == WLAN_EID_RSN) {
-                /*
-                fprintf(stderr, "Got RSN IE.  Dump: [");
-                for(pos=0; pos<length; pos++)
-                    fprintf(stderr, "%02x", ie_data[pos]);
-                fprintf(stderr, "   ");
-                for(pos=0; pos<length; pos++)
-                    fprintf(stderr, " %d", ie_data[pos]);
-                fprintf(stderr, "]\n");
-                */
-                handle_wpa(ap, ie_data+pos, length-pos, 2);
-                wpa_handled = 1;
-            }
-            #endif
+            parse_ie(ap, ie_data, length);
 
             break;
         }

@@ -7,6 +7,7 @@ enum chumby_encryption_type {
     ENC_WEP,
     ENC_AES,
     ENC_TKIP,
+    ENC_HUH, // Unknown??
 };
 
 enum chumby_auth_type {
@@ -16,6 +17,7 @@ enum chumby_auth_type {
     AUTH_WPAPSK,
     AUTH_WPA2EAP,
     AUTH_WPAEAP,
+    AUTH_DUNNO, // No clue
 };
 
 
