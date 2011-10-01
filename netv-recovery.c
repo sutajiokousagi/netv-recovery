@@ -988,6 +988,68 @@ setup_scenes(struct recovery_data *data)
     return 0;
 }
 
+static void
+prepare_devs(void) {
+    int fd;
+    fd = open("/dev/null", O_RDONLY);
+    if (-1 == fd) {
+        if (mkdir("/dev", 0777) == -1)
+            PERROR("Unable to mkdir /dev");
+
+        if (mknod("/dev/null", S_IFCHR | 0777, makedev(1, 3)) == -1)
+            PERROR("Unable to mknod /dev/null");
+
+        if (mknod("/dev/mem", S_IFCHR | 0777, makedev(1, 1)) == -1)
+            PERROR("Unable to mknod /dev/mem");
+
+        if (mknod("/dev/kmem", S_IFCHR | 0777, makedev(1, 2)) == -1)
+            PERROR("Unable to mknod /dev/kmem");
+
+        if (mknod("/dev/zero", S_IFCHR | 0777, makedev(1, 5)) == -1)
+            PERROR("Unable to mknod /dev/zero");
+
+        if (mknod("/dev/tty", S_IFCHR | 0777, makedev(5, 0)) == -1)
+            PERROR("Unable to mknod /dev/tty");
+        if (mknod("/dev/ttyGS0", S_IFCHR | 0777, makedev(249, 0)) == -1)
+            PERROR("Unable to mknod /dev/ttyGS0");
+        errfd = open("/dev/tty", O_WRONLY);
+        if (-1 != errfd)
+            errfil = fdopen(errfd, "w");
+
+        if (mkdir("/dev/input", 0777) == -1)
+            PERROR("Unable to mkdir /dev/input");
+        unlink("/dev/input/event0");
+        unlink("/dev/input/event1");
+        if (mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64)) == -1)
+            PERROR("Unable to mknod /dev/input/event0");
+        if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
+            PERROR("Unable to mknod /dev/input/event1");
+        if (mknod("/dev/fb0", S_IFCHR | 0777, makedev(29, 0)) == -1)
+            PERROR("Unable to mknod /dev/fb0");
+        if (mknod("/dev/mmcblk0",   S_IFCHR | 0777, makedev(179, 0)) == -1)
+            PERROR("Unable to mknod /dev/mmcblk0");
+        if (mknod("/dev/mmcblk0p1", S_IFCHR | 0777, makedev(179, 1)) == -1)
+            PERROR("Unable to mknod /dev/mmcblk0p1");
+        if (mknod("/dev/mmcblk0p2", S_IFCHR | 0777, makedev(179, 2)) == -1)
+            PERROR("Unable to mknod /dev/mmcblk0p2");
+        if (mknod("/dev/mmcblk0p3", S_IFCHR | 0777, makedev(179, 3)) == -1)
+            PERROR("Unable to mknod /dev/mmcblk0p3");
+        if (mknod("/dev/mmcblk0p4", S_IFCHR | 0777, makedev(179, 4)) == -1)
+            PERROR("Unable to mknod /dev/mmcblk0p4");
+        
+        fprintf(stderr, "Finished trying to set up /dev/\n");
+        {
+            char *newargv[] = {"/init"};
+            char *newargp[] = { NULL };
+            execve("/init", newargv, newargp);
+            PERROR("Unable to exec");
+        }
+    }
+
+    fprintf(stderr, "/dev/ was already set up\n");
+    alarm(1);
+}
+
 int main(int argc, char **argv) {
     struct recovery_data data;
     SDL_Event e;
@@ -1008,29 +1070,7 @@ int main(int argc, char **argv) {
     signal(SIGILL, sig_handle);
     signal(SIGFPE, sig_handle);
 #ifdef linux
-    if (mkdir("/dev", 0777) == -1)
-        PERROR("Unable to mkdir /dev");
-
-    if (mknod("/dev/tty", S_IFCHR | 0777, makedev(5, 0)) == -1)
-        PERROR("Unable to mknod /dev/tty");
-    if (mknod("/dev/ttyGS0", S_IFCHR | 0777, makedev(249, 0)) == -1)
-        PERROR("Unable to mknod /dev/ttyGS0");
-    errfd = open("/dev/tty", O_WRONLY);
-    if (-1 != errfd)
-        errfil = fdopen(errfd, "w");
-
-    if (mkdir("/dev/input", 0777) == -1)
-        PERROR("Unable to mkdir /dev/input");
-    unlink("/dev/input/event0");
-    unlink("/dev/input/event1");
-    if (mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64)) == -1)
-        PERROR("Unable to mknod /dev/input/event0");
-    if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
-        PERROR("Unable to mknod /dev/input/event1");
-    if (mknod("/dev/fb0", S_IFCHR | 0777, makedev(29, 0)) == -1)
-        PERROR("Unable to mknod /dev/fb0");
-    fprintf(stderr, "Finished trying to set up /dev/\n");
-    alarm(1);
+    prepare_devs();
 #endif
 
     bzero(&e, sizeof(e));
