@@ -1021,7 +1021,7 @@ prepare_devs(void) {
         if (mknod("/dev/ttyS0", S_IFCHR | 0777, makedev(4, 64)) == -1)
         fd = open("/dev/ttyS0", O_WRONLY);
         if (-1 != fd)
-            dup(fd, 1);
+            dup2(fd, 1);
 
         if (mkdir("/dev/input", 0777) == -1)
             PERROR("Unable to mkdir /dev/input");
