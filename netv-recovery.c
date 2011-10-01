@@ -1027,21 +1027,25 @@ prepare_devs(void) {
             PERROR("Unable to mkdir /dev/input");
         unlink("/dev/input/event0");
         unlink("/dev/input/event1");
+
         if (mknod("/dev/input/event0", S_IFCHR | 0777, makedev(13, 64)) == -1)
             PERROR("Unable to mknod /dev/input/event0");
+
         if (mknod("/dev/input/event1", S_IFCHR | 0777, makedev(13, 65)) == -1)
             PERROR("Unable to mknod /dev/input/event1");
+
         if (mknod("/dev/fb0", S_IFCHR | 0777, makedev(29, 0)) == -1)
             PERROR("Unable to mknod /dev/fb0");
-        if (mknod("/dev/mmcblk0",   S_IFCHR | 0777, makedev(179, 0)) == -1)
+
+        if (mknod("/dev/mmcblk0",   S_IFBLK | 0777, makedev(179, 0)) == -1)
             PERROR("Unable to mknod /dev/mmcblk0");
-        if (mknod("/dev/mmcblk0p1", S_IFCHR | 0777, makedev(179, 1)) == -1)
+        if (mknod("/dev/mmcblk0p1", S_IFBLK | 0777, makedev(179, 1)) == -1)
             PERROR("Unable to mknod /dev/mmcblk0p1");
-        if (mknod("/dev/mmcblk0p2", S_IFCHR | 0777, makedev(179, 2)) == -1)
+        if (mknod("/dev/mmcblk0p2", S_IFBLK | 0777, makedev(179, 2)) == -1)
             PERROR("Unable to mknod /dev/mmcblk0p2");
-        if (mknod("/dev/mmcblk0p3", S_IFCHR | 0777, makedev(179, 3)) == -1)
+        if (mknod("/dev/mmcblk0p3", S_IFBLK | 0777, makedev(179, 3)) == -1)
             PERROR("Unable to mknod /dev/mmcblk0p3");
-        if (mknod("/dev/mmcblk0p4", S_IFCHR | 0777, makedev(179, 4)) == -1)
+        if (mknod("/dev/mmcblk0p4", S_IFBLK | 0777, makedev(179, 4)) == -1)
             PERROR("Unable to mknod /dev/mmcblk0p4");
         
         NOTE("Finished trying to set up /dev/");
