@@ -13,6 +13,8 @@
 #include <sys/mount.h>
 
 #define RECOVERY_VERSION 0x010002
+char current_debug_message[1024];
+static struct textbox *debug_textbox;
 
 #ifdef linux
 #include <sys/reboot.h>
@@ -73,20 +75,17 @@ struct recovery_data;
 #define PERROR(format, arg...)            \
   do { \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
-    if (errfil) \
-        fprintf(errfil, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
+    snprintf(current_debug_message, sizeof(current_debug_message), "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
   } while(0)
 #define ERROR(format, arg...)            \
   do { \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
-    if (errfil) \
-      fprintf(errfil, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
+    snprintf(current_debug_message, sizeof(current_debug_message), "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
   } while(0)
 #define NOTE(format, arg...)            \
   do { \
     fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
-    if (errfil) \
-      fprintf(errfil, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
+    snprintf(current_debug_message, sizeof(current_debug_message), "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
   } while(0)
 
 static const char *auth_type_str[] = {
@@ -642,6 +641,7 @@ redraw_scene(struct recovery_data *data)
     SDL_FillRect(data->screen, NULL, 0);
     for (i=0; i<data->scene->num_elements; i++)
         data->scene->elements[i].draw(data->scene->elements[i].data, data->screen);
+    set_label_textbox(debug_textbox, current_debug_message);
     SDL_Flip(data->screen);
 
     return 0;
@@ -685,6 +685,12 @@ setup_scenes(struct recovery_data *data)
     picker->data = data;
     picker->pick_item = pick_ssid;
 
+    debug_textbox = create_textbox();
+    debug_textbox->x = 140;
+    debug_textbox->y = 650;
+    debug_textbox->w = 1000;
+    debug_textbox->h = 128;
+    debug_textbox->data = data;
 
     textbox = create_textbox();
     textbox->x = 140;
@@ -1003,11 +1009,12 @@ int main(int argc, char **argv) {
 #ifdef linux
     if (mkdir("/dev", 0777) == -1)
         PERROR("Unable to mkdir /dev");
+
     if (mknod("/dev/tty", S_IFCHR | 0777, makedev(5, 0)) == -1)
         PERROR("Unable to mknod /dev/tty");
     if (mknod("/dev/ttyGS0", S_IFCHR | 0777, makedev(249, 0)) == -1)
         PERROR("Unable to mknod /dev/ttyGS0");
-    errfd = open("/dev/ttyGS0", O_WRONLY);
+    errfd = open("/dev/tty", O_WRONLY);
     if (-1 != errfd)
         errfil = fdopen(errfd, "w");
 
