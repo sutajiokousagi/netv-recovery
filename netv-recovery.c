@@ -95,6 +95,7 @@ static const char *auth_type_str[] = {
     "WPAPSK",
     "WPA2EAP",
     "WPAEAP",
+    "Unknown",
 };
 
 
@@ -585,7 +586,7 @@ run_ap_scan(struct recovery_data *data)
 
     clear_picker(picker);
     for (i=0; data->aps && data->aps[i].populated; i++) {
-        NOTE("Found AP[%d]: %s (%s)", i, data->aps[i].ssid, auth_type_str[data->aps[i].auth]);
+        NOTE("    Found AP[%d]: %s (%s)", i, data->aps[i].ssid, auth_type_str[data->aps[i].auth]);
         add_item_to_picker(picker, data->aps[i].ssid);
     }
     add_item_to_picker(picker, OTHER_NETWORK_STRING);
