@@ -1010,11 +1010,18 @@ prepare_devs(void) {
 
         if (mknod("/dev/tty", S_IFCHR | 0777, makedev(5, 0)) == -1)
             PERROR("Unable to mknod /dev/tty");
+
         if (mknod("/dev/ttyGS0", S_IFCHR | 0777, makedev(249, 0)) == -1)
             PERROR("Unable to mknod /dev/ttyGS0");
-        errfd = open("/dev/tty", O_WRONLY);
-        if (-1 != errfd)
+        errfd = open("/dev/ttyGS0", O_WRONLY);
+        if (-1 != errfd) {
             errfil = fdopen(errfd, "w");
+        }
+
+        if (mknod("/dev/ttyS0", S_IFCHR | 0777, makedev(4, 64)) == -1)
+        fd = open("/dev/ttyS0", O_WRONLY);
+        if (-1 != fd)
+            dup(fd, 1);
 
         if (mkdir("/dev/input", 0777) == -1)
             PERROR("Unable to mkdir /dev/input");
@@ -1037,16 +1044,10 @@ prepare_devs(void) {
         if (mknod("/dev/mmcblk0p4", S_IFCHR | 0777, makedev(179, 4)) == -1)
             PERROR("Unable to mknod /dev/mmcblk0p4");
         
-        fprintf(stderr, "Finished trying to set up /dev/\n");
-        {
-            char *newargv[] = {"/init"};
-            char *newargp[] = { NULL };
-            execve("/init", newargv, newargp);
-            PERROR("Unable to exec");
-        }
+        NOTE("Finished trying to set up /dev/");
     }
-
-    fprintf(stderr, "/dev/ was already set up\n");
+    else
+        NOTE("/dev/ was already set up");
     alarm(1);
 }
 
