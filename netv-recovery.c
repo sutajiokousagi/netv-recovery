@@ -642,6 +642,7 @@ redraw_scene(struct recovery_data *data)
     for (i=0; i<data->scene->num_elements; i++)
         data->scene->elements[i].draw(data->scene->elements[i].data, data->screen);
     set_label_textbox(debug_textbox, current_debug_message);
+    redraw_textbox(debug_textbox, data->screen);
     SDL_Flip(data->screen);
 
     return 0;
