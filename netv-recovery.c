@@ -64,7 +64,7 @@ int errfd;
 FILE *errfil;
 
 //#define IMAGE_URL "http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz"
-#define IMAGE_URL "http://175.41.134.235/build/silvermoon-netv/LATEST/disk-image.gz"
+#define IMAGE_URL "http://netv.bunnie-bar.com/build/silvermoon-netv/LATEST/disk-image.gz"
 #define OTHER_NETWORK_STRING "[Other Network]"
 struct recovery_data;
 
