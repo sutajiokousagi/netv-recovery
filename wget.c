@@ -40,15 +40,11 @@ static char* strchrnul(const char *s, int c)
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include "log.h"
 
 typedef int smallint;
 typedef unsigned smalluint;
 
-#define ERROR(format, arg...)            \
-    fprintf(stderr, "wget.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
-#define PERROR(format, arg...)            \
-    fprintf(stderr, "wget.c - %s():%d - " format ": %s\n", __func__, \
-            __LINE__, ## arg, strerror(errno))
 #ifndef offsetof
 # define offsetof(T,F) ((unsigned int)((char *)&((T *)0L)->F - (char *)0L))
 #endif

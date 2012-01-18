@@ -7,15 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include "log.h"
 
 #define CONFIG_FILE "/wpa.conf"
-
-#define NOTE(format, arg...)            \
-    fprintf(stderr, "wpa-controller.c - %s():%d - " format, __func__, __LINE__, ## arg)
-#define ERROR(format, arg...)            \
-    fprintf(stderr, "wpa-controller.c - %s():%d - " format, __func__, __LINE__, ## arg)
-#define PERROR(format, arg...)            \
-    fprintf(stderr, "wpa-controller.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
 
 struct wpa_process {
     int pid;
@@ -79,7 +73,7 @@ int poll_wpa(struct wpa_process *process, int blocking) {
 
         /* This happens if wpa_supplicant quits */
         if (!bytes) {
-            ERROR("wpa_supplicant shut down\n");
+            ERROR("wpa_supplicant shut down");
             return -1;
         }
 
@@ -95,7 +89,7 @@ int poll_wpa(struct wpa_process *process, int blocking) {
         for(i=0; line[i] && i<bytes; i++)
             if (line[i] == '\n' || line[i] == '\r')
                 line[i] = '\0';
-        NOTE("Read %d bytes from %d.  Line: [%s]\n", bytes, fd, line);
+        NOTE("Read %d bytes from %d.  Line: [%s]", bytes, fd, line);
 
         if (startswith(line, "Associated with "))
             return 1;

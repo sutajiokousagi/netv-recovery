@@ -12,10 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/mount.h>
 
-#define RECOVERY_VERSION 0x010002
-char current_debug_message[1024];
-static struct textbox *debug_textbox;
-
+#define RECOVERY_VERSION 0x010003
 #ifdef linux
 #include <sys/reboot.h>
 #include <sys/syscall.h>
@@ -40,6 +37,7 @@ static struct textbox *debug_textbox;
 #include "wget.h"
 #include "gunzip.h"
 #include "config-area.h"
+#include "log.h"
 
 #define ICON_W 64
 #define ICON_H 64
@@ -60,8 +58,10 @@ static struct textbox *debug_textbox;
 #define ENC_OPEN 0
 #define ENC_WPA 1
 
-int errfd;
-FILE *errfil;
+char current_debug_message[DEBUG_MESSAGE_SIZE];
+static struct textbox *debug_textbox;
+FILE *serial_output;
+
 
 //#define IMAGE_URL "http://buildbot.chumby.com.sg/build/silvermoon-netv/LATEST/disk-image.gz"
 #define IMAGE_URL "http://netv.bunnie-bar.com/build/silvermoon-netv/LATEST/disk-image.gz"
@@ -71,22 +71,6 @@ struct recovery_data;
 #define MAKEDRAW(x) ((void (*)(void *, void *))x)
 #define MAKEPRESS(x) ((void (*)(void *, int))x)
 #define MAKEFUNC(x) ((void (*)(struct recovery_data *))x)
-
-#define PERROR(format, arg...)            \
-  do { \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
-    snprintf(current_debug_message, sizeof(current_debug_message), "netv-recovery.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno)); \
-  } while(0)
-#define ERROR(format, arg...)            \
-  do { \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
-    snprintf(current_debug_message, sizeof(current_debug_message), "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
-  } while(0)
-#define NOTE(format, arg...)            \
-  do { \
-    fprintf(stderr, "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
-    snprintf(current_debug_message, sizeof(current_debug_message), "netv-recovery.c - %s():%d - " format "\n", __func__, __LINE__, ## arg); \
-  } while(0)
 
 static const char *auth_type_str[] = {
     "OPEN",
@@ -1014,10 +998,6 @@ prepare_devs(void) {
 
         if (mknod("/dev/ttyGS0", S_IFCHR | 0777, makedev(249, 0)) == -1)
             PERROR("Unable to mknod /dev/ttyGS0");
-        errfd = open("/dev/ttyGS0", O_WRONLY);
-        if (-1 != errfd) {
-            errfil = fdopen(errfd, "w");
-        }
 
         if (mknod("/dev/ttyS0", S_IFCHR | 0777, makedev(4, 64)) == -1)
         fd = open("/dev/ttyS0", O_WRONLY);
@@ -1059,6 +1039,7 @@ prepare_devs(void) {
 int main(int argc, char **argv) {
     struct recovery_data data;
     SDL_Event e;
+    unsigned int loop_count = 0;
 
     bzero(&data, sizeof(data));
 
@@ -1130,43 +1111,57 @@ int main(int argc, char **argv) {
     NOTE("Entering main loop");
     while (!data.should_quit) {
 
-        SDL_WaitEvent(&e);
-        switch(e.type) {
-            case SDL_QUIT:
-                data.should_quit = 1;
-                break;
+        if (SDL_PollEvent(&e)) {
+            switch(e.type) {
+                case SDL_QUIT:
+                    data.should_quit = 1;
+                    break;
 
-            case SDL_KEYDOWN: {
-                SDL_KeyboardEvent *key = (SDL_KeyboardEvent *)&e;
+                case SDL_KEYDOWN: {
+                    SDL_KeyboardEvent *key = (SDL_KeyboardEvent *)&e;
 
-                switch (key->keysym.sym) {
-                    case SDLK_UP:
-                    case SDLK_DOWN:
-                    case SDLK_LEFT:
-                    case SDLK_RIGHT:
-                    case SDLK_RETURN:
+                    switch (key->keysym.sym) {
+                        case SDLK_UP:
+                        case SDLK_DOWN:
+                        case SDLK_LEFT:
+                        case SDLK_RIGHT:
+                        case SDLK_RETURN:
 
-                        process_key(&data, key->keysym.sym);
-                        redraw_scene(&data);
+                            process_key(&data, key->keysym.sym);
+                            redraw_scene(&data);
 
-                        break;
+                            break;
 
-                    case SDLK_ESCAPE:
-                        data.should_quit = 1;
-                        SDL_Quit();
-                        break;
+                        case SDLK_ESCAPE:
+                            data.should_quit = 1;
+                            SDL_Quit();
+                            break;
 
-                    default:
-                        break;
+                        default:
+                            break;
+                    }
+
+
+                    break;
                 }
 
-
-                break;
+                default:
+                    break;
             }
-
-            default:
-                break;
         }
+
+        if (!serial_output) {
+            serial_output = fopen("/dev/ttyGS0", "w+");
+
+            /* No serial device was detected.  Wait 50 msec again. */
+            if (!serial_output)
+                usleep(1000*50);
+        }
+
+        if (serial_output)
+            NOTE("Serial output discovered");
+
+        loop_count++;
     }
 
     SDL_Quit();

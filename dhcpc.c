@@ -52,6 +52,8 @@
 #include <linux/sockios.h>
 #include <linux/route.h>
 
+#include "log.h"
+
 #ifndef offsetof
 # define offsetof(T,F) ((unsigned int)((char *)&((T *)0L)->F - (char *)0L))
 #endif
@@ -64,15 +66,6 @@
 
 
 #define LOG1(format, arg...)
-
-#define NOTE(format, arg...)            \
-    fprintf(stderr, "dhcpc.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
-#define PERROR(format, arg...)            \
-    fprintf(stderr, "dhcpc.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
-
-
-#define ERROR(format, arg...)            \
-    fprintf(stderr, "dhcpc.c - %s():%d - " format, __func__, __LINE__, ## arg)
 
 
 // Die if we can't allocate and zero size bytes of memory.

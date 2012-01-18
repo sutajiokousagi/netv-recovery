@@ -41,12 +41,7 @@
 #include <string.h>
 #include <strings.h>
 #include <errno.h>
-
-#define ERROR(format, arg...)            \
-    fprintf(stderr, "gunzip.c - %s():%d - " format "\n", __func__, __LINE__, ## arg)
-#define PERROR(format, arg...)            \
-    fprintf(stderr, "gunzip.c - %s():%d - " format ": %s\n", __func__, \
-            __LINE__, ## arg, strerror(errno))
+#include "log.h"
 
 typedef int smallint;
 typedef unsigned smalluint;

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include "log.h"
 
 #ifdef DBG
 #define DEBUG_ADD(format, arg...)            \
@@ -22,13 +23,6 @@
 #define DEBUG_ADD(format, arg...)
 #define DEBUG(format, arg...)
 #endif
-
-#define ERROR(format, arg...)            \
-    fprintf(stderr, "udev.c - %s():%d - " format, __func__, __LINE__, ## arg)
-#define NOTE(format, arg...)            \
-    fprintf(stderr, "udev.c - %s():%d - " format, __func__, __LINE__, ## arg)
-#define PERROR(format, arg...)            \
-    fprintf(stderr, "udev.c - %s():%d - " format ": %s\n", __func__, __LINE__, ## arg, strerror(errno))
 
 #define COMPAT_FIRMWARE_STR "SUBSYSTEM=compat_firmware"
 #define FIRMWARE_STR "SUBSYSTEM=firmware"
@@ -89,15 +83,15 @@ int load_firmware(char *msg, int len) {
 	}
 
 	if (!firmware) {
-		ERROR("Firmware string was not located!\n");
+		ERROR("Firmware string was not located!");
 		return -1;
 	}
 	if (!devpath) {
-		ERROR("Devpath string was not located!\n");
+		ERROR("Devpath string was not located!");
 		return -2;
 	}
 
-	NOTE("Loading firmware %s to device at path %s\n", firmware, devpath);
+	NOTE("Loading firmware %s to device at path %s", firmware, devpath);
 
 	/* Open up the firmware blob */
 	snprintf(str, sizeof(str), "/firmware/%s", firmware);
@@ -164,7 +158,7 @@ int udev_main(void) {
 	const int on = 1;
 	int pid;
 
-	NOTE("Beginning udev support\n");
+	NOTE("Beginning udev support");
 
 	sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
 	if (sock == -1) {
@@ -202,7 +196,7 @@ int udev_main(void) {
 			exit(1);
 		}
 		if (bytes == 0) {
-			ERROR("Kernel netlink closed\n");
+			ERROR("Kernel netlink closed");
 			exit(2);
 		}
 
