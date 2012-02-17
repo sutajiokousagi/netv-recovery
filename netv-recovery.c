@@ -1175,7 +1175,7 @@ int main(int argc, char **argv) {
     while (!data.should_quit) {
 
         NOTE("Polling...");
-        poll_inputs(serial_output, stdin);
+        //poll_inputs(serial_output, stdin);
         if (SDL_PollEvent(&e)) {
             switch(e.type) {
                 case SDL_QUIT:
@@ -1226,7 +1226,7 @@ int main(int argc, char **argv) {
 
 
         loop_count++;
-        usleep(100*100);
+        usleep(1000*100);
     }
 
     SDL_Quit();
