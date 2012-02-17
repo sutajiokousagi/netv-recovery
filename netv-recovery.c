@@ -1221,8 +1221,11 @@ int main(int argc, char **argv) {
         if (!serial_output) {
             serial_output = fopen("/dev/ttyGS0", "rw+");
 
-            if (serial_output)
+            if (serial_output) {
+                int fd = fileno(serial_output);
                 NOTE("Opened serial port");
+                fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+            }
         }
 
 
