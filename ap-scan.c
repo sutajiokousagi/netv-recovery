@@ -697,7 +697,6 @@ iw_init_event_stream(struct stream_descr *  stream, /* Stream of events */
 int iw_get_range_info(int skfd, const char *ifname, iwrange *range) {
     struct iwreq        wrq;
     char                buffer[sizeof(iwrange) * 2]; /* Large enough */
-    union iw_range_raw *range_raw;
 
     /* Cleanup */
     bzero(buffer, sizeof(buffer));
@@ -707,9 +706,6 @@ int iw_get_range_info(int skfd, const char *ifname, iwrange *range) {
     wrq.u.data.flags   = 0;
     if(iw_get_ext(skfd, ifname, SIOCGIWRANGE, &wrq) < 0)
         return(-1);
-
-    /* Point to the buffer */
-    range_raw = (union iw_range_raw *) buffer;
 
     /* This is our native format, that's easy... */
     /* Copy stuff at the right place, ignore extra */
