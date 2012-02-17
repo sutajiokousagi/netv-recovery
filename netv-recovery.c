@@ -1052,6 +1052,7 @@ static int set_stdin_nonblock(void) {
 }
 
 
+/*
 static int poll_inputs(FILE *f1, FILE *f2) {
     struct timeval tv;
     int biggest;
@@ -1097,6 +1098,7 @@ static int poll_inputs(FILE *f1, FILE *f2) {
     }
     return 0;
 }
+*/
 
 int main(int argc, char **argv) {
     struct recovery_data data;
