@@ -11,6 +11,8 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <sys/mount.h>
+#include <curses.h>
+#include <termios.h>
 
 #define RECOVERY_VERSION 0x010003
 #ifdef linux
@@ -1036,6 +1038,66 @@ prepare_devs(void) {
     alarm(1);
 }
 
+static int set_stdin_nonblock(void) {
+    struct termios ttystate;
+    //get the terminal state
+    tcgetattr(STDIN_FILENO, &ttystate);
+    //turn off canonical mode
+    ttystate.c_lflag &= ~ICANON;
+    //minimum of number input read.
+    ttystate.c_cc[VMIN] = 1;
+    //set the terminal attributes.
+    tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+    return 0;
+}
+
+
+static int poll_inputs(FILE *f1, FILE *f2) {
+    struct timeval tv;
+    int biggest;
+    fd_set fds;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    FD_ZERO(&fds);
+
+    if (!f1 && !f2)
+        return 0;
+
+    if (f1)
+        FD_SET(fileno(f1), &fds);
+    if (f2)
+        FD_SET(fileno(f2), &fds);
+    biggest = fileno(f1);
+    if (fileno(f2) > biggest)
+        biggest = fileno(f2);
+
+    select(biggest+1, &fds, NULL, NULL, &tv);
+    if (f1 && FD_ISSET(fileno(f1), &fds)) {
+        int c = fgetc(f1);
+        SDL_KeyboardEvent e;
+        e.keysym.sym = c;
+        e.type = SDL_KEYDOWN;
+        e.state = SDL_PRESSED;
+        SDL_PushEvent((SDL_Event *)&e);
+        e.type = SDL_KEYUP;
+        e.state = SDL_RELEASED;
+        SDL_PushEvent((SDL_Event *)&e);
+    }
+
+    if (f2 && FD_ISSET(fileno(f2), &fds)) {
+        int c = fgetc(f2);
+        SDL_KeyboardEvent e;
+        e.keysym.sym = c;
+        e.type = SDL_KEYDOWN;
+        e.state = SDL_PRESSED;
+        SDL_PushEvent((SDL_Event *)&e);
+        e.type = SDL_KEYUP;
+        e.state = SDL_RELEASED;
+        SDL_PushEvent((SDL_Event *)&e);
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     struct recovery_data data;
     SDL_Event e;
@@ -1058,6 +1120,7 @@ int main(int argc, char **argv) {
     signal(SIGFPE, sig_handle);
 #ifdef linux
     prepare_devs();
+    set_stdin_nonblock();
 #endif
 
     bzero(&e, sizeof(e));
@@ -1111,6 +1174,8 @@ int main(int argc, char **argv) {
     NOTE("Entering main loop");
     while (!data.should_quit) {
 
+        NOTE("Polling...");
+        poll_inputs(serial_output, stdin);
         if (SDL_PollEvent(&e)) {
             switch(e.type) {
                 case SDL_QUIT:
@@ -1138,6 +1203,7 @@ int main(int argc, char **argv) {
                             break;
 
                         default:
+                            NOTE("Gut unrecognized key: %d", key->keysym.sym);
                             break;
                     }
 
@@ -1151,17 +1217,16 @@ int main(int argc, char **argv) {
         }
 
         if (!serial_output) {
-            serial_output = fopen("/dev/ttyGS0", "w+");
+            serial_output = fopen("/dev/ttyGS0", "rw+");
 
-            /* No serial device was detected.  Wait 50 msec again. */
-            if (!serial_output)
-                usleep(1000*50);
+            if (serial_output)
+                NOTE("Opened serial port");
         }
 
-        if (serial_output)
-            NOTE("Serial output discovered");
+
 
         loop_count++;
+        usleep(100*100);
     }
 
     SDL_Quit();
