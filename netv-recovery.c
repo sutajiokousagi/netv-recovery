@@ -1219,7 +1219,9 @@ int main(int argc, char **argv) {
         }
 
         if (!serial_output) {
-            serial_output = fopen("/dev/ttyGS0", "rw+");
+            // Enable this to do debugging without a serial
+            // port attached to the onboard debug header.
+            //serial_output = fopen("/dev/ttyGS0", "rw+");
 
             if (serial_output) {
                 int fd = fileno(serial_output);
